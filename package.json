@@ -1,6 +1,6 @@
 {
 	"name": "sdo_mcp",
-	"version": "1.0.0",
+	"version": "1.1.0",
 	"description": "",
 	"main": "srd/index.js",
 	"scripts": {
