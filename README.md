@@ -6,7 +6,7 @@
 
 ## Статус версии
 
-Версия: `0.1.0`
+Версия: `0.2.0`
 
 Текущая версия является тестовой и предназначена для локального использования.
 
@@ -17,16 +17,70 @@
 - выполнять вход через профиль ТУСУР;
 - сохранять авторизационную сессию;
 - получать список курсов;
-- открывать страницу задания и возвращать её текст.
+- получать список материалов внутри курса;
+- читать страницу задания или ресурса;
+- скачивать файлы только из конкретного модуля курса;
+- сохранять текст страницы модуля в `.txt`.
 
-## Используемый стек
+## Важное разделение URL
 
-- Node.js
-- TypeScript
-- MCP TypeScript SDK
-- Playwright
-- dotenv
-- zod
+В SDO TUSUR есть разные типы страниц. Их нельзя обрабатывать одинаково.
+
+### Страница курса
+
+Пример:
+
+```text
+https://sdo.tusur.ru/course/view.php?id=21380
+```
+
+Это главная страница курса. На ней находятся ссылки на задания, презентации, ресурсы, тесты и другие элементы.
+
+Для неё используется tool:
+
+```text
+list_course_modules
+```
+
+Страницу курса нельзя передавать в скачивание одного модуля, иначе можно случайно начать обходить весь курс.
+
+### Ресурс / файл
+
+Пример:
+
+```text
+https://sdo.tusur.ru/mod/resource/view.php?id=559755
+```
+
+Это конкретный ресурс Moodle, например презентация:
+
+```text
+Презентация 1.1. на тему Введение в экономику
+```
+
+Для него используется tool:
+
+```text
+download_module_files
+```
+
+### Задание
+
+Пример:
+
+```text
+https://sdo.tusur.ru/mod/assign/view.php?id=559759
+```
+
+Это конкретное задание Moodle.
+
+Для него также используется tool:
+
+```text
+download_module_files
+```
+
+При скачивании задания сервер сохраняет текст задания и скачивает только файлы, прикреплённые к этому заданию.
 
 ## Архитектура
 
@@ -57,21 +111,207 @@ profile.tusur.ru / sdo.tusur.ru
 ```json
 [
 	{
-		"title": "Название курса",
-		"url": "https://sdo.tusur.ru/course/view.php?id=..."
+		"title": "Экономика и финансы предприятий",
+		"url": "https://sdo.tusur.ru/course/view.php?id=21380"
 	}
 ]
 ```
 
-### get_assignment_details
+### list_course_modules
 
-Открывает страницу задания в SDO и возвращает текст страницы.
+Получает список материалов и заданий на странице конкретного курса.
 
 Аргументы:
 
 ```json
 {
-	"assignmentUrl": "https://sdo.tusur.ru/mod/assign/view.php?id=..."
+	"courseUrl": "https://sdo.tusur.ru/course/view.php?id=21380"
+}
+```
+
+Пример результата:
+
+```json
+{
+	"courseUrl": "https://sdo.tusur.ru/course/view.php?id=21380",
+	"modules": [
+		{
+			"title": "Презентация 1.1. на тему Введение в экономику Файл",
+			"url": "https://sdo.tusur.ru/mod/resource/view.php?id=559755",
+			"type": "resource"
+		},
+		{
+			"title": "Задание №1 Кейсы",
+			"url": "https://sdo.tusur.ru/mod/assign/view.php?id=559759",
+			"type": "assign"
+		}
+	]
+}
+```
+
+### get_assignment_details
+
+Открывает страницу задания или ресурса и возвращает текст страницы.
+
+Аргументы:
+
+```json
+{
+	"assignmentUrl": "https://sdo.tusur.ru/mod/assign/view.php?id=559759"
+}
+```
+
+Также может использоваться для ресурса:
+
+```json
+{
+	"assignmentUrl": "https://sdo.tusur.ru/mod/resource/view.php?id=559755"
+}
+```
+
+### download_module_files
+
+Скачивает файлы только из одного конкретного модуля SDO TUSUR.
+
+Поддерживаемые типы:
+
+```text
+/mod/resource/view.php
+/mod/assign/view.php
+```
+
+Аргументы:
+
+```json
+{
+	"moduleUrl": "https://sdo.tusur.ru/mod/resource/view.php?id=559755"
+}
+```
+
+или:
+
+```json
+{
+	"moduleUrl": "https://sdo.tusur.ru/mod/assign/view.php?id=559759"
+}
+```
+
+Не поддерживается напрямую:
+
+```text
+/course/view.php
+```
+
+Для страницы курса сначала нужно вызвать:
+
+```text
+list_course_modules
+```
+
+а затем передать конкретный `resource` или `assign` URL в:
+
+```text
+download_module_files
+```
+
+## Скачивание файлов
+
+Скачивание работает по правилу:
+
+```text
+course URL    → только получить список модулей
+resource URL  → скачать только этот ресурс
+assign URL    → скачать только файлы этого задания
+```
+
+Сервер специально игнорирует ссылки на соседние страницы:
+
+```text
+/course/view.php
+/mod/assign/view.php
+/mod/resource/view.php
+/mod/forum/
+/mod/quiz/
+/user/
+/grade/
+/calendar/
+```
+
+Это сделано, чтобы случайно не скачать весь курс при обработке одного задания.
+
+Реальными файлами считаются ссылки вида:
+
+```text
+/pluginfile.php/
+/webservice/pluginfile.php/
+```
+
+а также прямые ссылки на файлы:
+
+```text
+.pdf
+.doc
+.docx
+.xls
+.xlsx
+.ppt
+.pptx
+.zip
+.rar
+.7z
+.txt
+.jpg
+.jpeg
+.png
+```
+
+## Куда сохраняются файлы
+
+Файлы сохраняются в папку:
+
+```text
+downloads/
+```
+
+Для каждого модуля создаётся отдельная папка:
+
+```text
+downloads/resource-559755 - Презентация 1.1. на тему Введение в экономику/
+```
+
+или:
+
+```text
+downloads/assign-559759 - Задание №1 Кейсы/
+```
+
+Внутри всегда сохраняется текст страницы:
+
+```text
+module-text.txt
+```
+
+Если на странице есть прикреплённые файлы, они сохраняются рядом.
+
+Пример результата:
+
+```json
+{
+	"moduleType": "resource",
+	"moduleId": "559755",
+	"moduleUrl": "https://sdo.tusur.ru/mod/resource/view.php?id=559755",
+	"title": "Презентация 1.1. на тему Введение в экономику",
+	"outputDir": "downloads\\resource-559755 - Презентация 1.1. на тему Введение в экономику",
+	"textPath": "downloads\\resource-559755 - Презентация 1.1. на тему Введение в экономику\\module-text.txt",
+	"foundLinks": 1,
+	"files": [
+		{
+			"title": "presentation.pdf",
+			"url": "https://sdo.tusur.ru/pluginfile.php/...",
+			"path": "downloads\\resource-559755 - ...\\presentation.pdf",
+			"status": "downloaded"
+		}
+	]
 }
 ```
 
@@ -125,20 +365,38 @@ HEADLESS=false
 
 Файл `storage/auth.json` содержит cookies и данные сессии. Его нельзя публиковать или добавлять в Git.
 
+Сервер не должен начинать вход с:
+
+```text
+https://sdo.tusur.ru/login/index.php
+```
+
+Потому что при наличии токена Moodle может показать страницу выхода или подтверждения смены состояния сессии.
+
+Правильная стартовая страница:
+
+```text
+https://sdo.tusur.ru/
+```
+
 ## Важные файлы
 
 ```text
 src/
-  index.ts       # MCP server и регистрация tools
-  browser.ts    # запуск Playwright и сохранение auth state
-  sdo.ts        # логика входа и работы с SDO
-  test-login.ts # ручной тест без MCP-клиента
+  index.ts                    # MCP server и регистрация tools
+  browser.ts                  # запуск Playwright и сохранение auth state
+  sdo.ts                      # логика входа, курсов, модулей и скачивания
+  test-login.ts               # ручной тест логина без MCP-клиента
+  test-module-download.ts     # ручной тест скачивания одного модуля
 
 storage/
-  auth.json     # сохранённая сессия Playwright
+  auth.json                   # сохранённая сессия Playwright
+
+downloads/
+  ...                         # скачанные материалы
 
 dist/
-  index.js      # собранный MCP-сервер
+  index.js                    # собранный MCP-сервер
 ```
 
 ## .gitignore
@@ -166,51 +424,49 @@ npm run build
 dist/index.js
 ```
 
-## Локальный тест без MCP-клиента
+Проверить:
 
-Создать файл:
+```powershell
+Test-Path "dist/index.js"
+```
+
+Ожидаемый результат:
 
 ```text
-src/test-login.ts
+True
 ```
 
-Пример содержимого:
-
-```ts
-import 'dotenv/config'
-import { getSdoPage } from './browser.js'
-import { ensureLoggedIn, listCourses } from './sdo.js'
-
-const { context, page } = await getSdoPage()
-
-try {
-	await ensureLoggedIn(page, context)
-
-	const courses = await listCourses(page)
-
-	console.log('COURSES:')
-	console.log(JSON.stringify(courses, null, 2))
-} catch (error) {
-	await page.screenshot({
-		path: 'debug-login.png',
-		fullPage: true,
-	})
-
-	console.error('TEST FAILED:')
-	console.error(error)
-	console.error('Screenshot saved to debug-login.png')
-} finally {
-	await context.close()
-}
-```
-
-Запуск:
+## Локальный тест логина без MCP-клиента
 
 ```powershell
 npx tsx src/test-login.ts
 ```
 
 Если всё работает, откроется браузер, произойдёт вход в SDO, а в терминале появится список курсов.
+
+## Локальный тест скачивания одного ресурса
+
+Пример для презентации:
+
+```powershell
+npx tsx src/test-module-download.ts "https://sdo.tusur.ru/mod/resource/view.php?id=559755"
+```
+
+Этот тест должен скачать только конкретный ресурс:
+
+```text
+Презентация 1.1. на тему Введение в экономику
+```
+
+Он не должен обходить весь курс.
+
+## Локальный тест скачивания одного задания
+
+```powershell
+npx tsx src/test-module-download.ts "https://sdo.tusur.ru/mod/assign/view.php?id=559759"
+```
+
+Этот тест должен сохранить текст конкретного задания и скачать только файлы, прикреплённые к нему.
 
 ## Тест через MCP Inspector
 
@@ -232,10 +488,33 @@ npx @modelcontextprotocol/inspector node dist/index.js
 
 ```text
 list_courses
+list_course_modules
 get_assignment_details
+download_module_files
 ```
 
-Можно выбрать `list_courses` и нажать `Run Tool`.
+## Подключение к LM Studio на Windows
+
+Пример конфига MCP для LM Studio:
+
+```json
+{
+	"mcpServers": {
+		"sdo-tsu": {
+			"command": "C:/Program Files/nodejs/node.exe",
+			"args": ["C:/Users/New/Documents/tusur/sdo_mcp/dist/index.js"],
+			"cwd": "C:/Users/New/Documents/tusur/sdo_mcp"
+		}
+	}
+}
+```
+
+Важно:
+
+- использовать полный путь к `node.exe`;
+- использовать прямые слэши `/`;
+- указать правильный `cwd`, чтобы `.env` был найден;
+- перед подключением выполнить `npm run build`.
 
 ## Важное правило для stdio MCP
 
@@ -268,6 +547,8 @@ stderr = debug-логи
 Unexpected token 'L', "Logging in"... is not valid JSON
 ```
 
+````
+
 ## Подключение к LM Studio на Windows
 
 Пример конфига MCP для LM Studio:
@@ -282,7 +563,7 @@ Unexpected token 'L', "Logging in"... is not valid JSON
 		}
 	}
 }
-```
+````
 
 Важно:
 
@@ -291,23 +572,9 @@ Unexpected token 'L', "Logging in"... is not valid JSON
 - указать правильный `cwd`, чтобы `.env` был найден;
 - перед подключением выполнить `npm run build`.
 
-## Проверка путей на Windows
-
-```powershell
-Test-Path "C:\Program Files\nodejs\node.exe"
-Test-Path "C:\Users\New\Documents\tusur\sdo_mcp\dist\index.js"
-Test-Path "C:\Users\New\Documents\tusur\sdo_mcp\.env"
-```
-
-Все команды должны вернуть:
-
-```text
-True
-```
-
 ## Типичные ошибки
 
-### spawn node ENOENT
+### `spawn node ENOENT`
 
 LM Studio не может найти Node.js.
 
@@ -317,7 +584,7 @@ LM Studio не может найти Node.js.
 "command": "C:/Program Files/nodejs/node.exe"
 ```
 
-### dist/index.js не найден
+### `dist/index.js` не найден
 
 Проект не был собран.
 
@@ -327,17 +594,27 @@ LM Studio не может найти Node.js.
 npm run build
 ```
 
-### Unexpected token Logging
+### `test-module-download.ts` не найден
+
+Файл теста ещё не создан.
+
+Решение: создать файл:
+
+```text
+src/test-module-download.ts
+```
+
+### `Unexpected token Logging`
 
 В коде есть `console.log`.
 
 Решение: заменить `console.log` на `console.error`.
 
-### Код идёт в profile.tusur.ru, хотя курсы уже видны
+### Код идёт в `profile.tusur.ru`, хотя курсы уже видны
 
 Проблема в проверке авторизации.
 
-Решение: в `isLoggedIntoSdo` нужно сначала проверять наличие ссылок курсов:
+Решение: в `isLoggedIntoSdo` сначала проверять наличие ссылок курсов:
 
 ```ts
 page.locator('a[href*="/course/view.php"]')
@@ -361,6 +638,36 @@ https://sdo.tusur.ru/
 
 Если SDO показывает страницу выхода, нельзя нажимать подтверждение выхода. Нужно вернуться на главную страницу SDO.
 
+### Скачивание пытается пройти по 30+ ссылкам
+
+Значит в функцию скачивания был передан URL курса или старая версия функции собирает все ссылки курса.
+
+Правильная логика:
+
+```text
+/course/view.php        → list_course_modules
+/mod/resource/view.php  → download_module_files
+/mod/assign/view.php    → download_module_files
+```
+
+Для скачивания нельзя передавать:
+
+```text
+https://sdo.tusur.ru/course/view.php?id=21380
+```
+
+Сначала нужно получить список модулей, потом скачать конкретный модуль:
+
+```text
+https://sdo.tusur.ru/mod/resource/view.php?id=559755
+```
+
+или:
+
+```text
+https://sdo.tusur.ru/mod/assign/view.php?id=559759
+```
+
 ## Безопасность
 
 Не публиковать:
@@ -369,6 +676,7 @@ https://sdo.tusur.ru/
 .env
 storage/auth.json
 debug-*.png
+downloads/
 ```
 
 Эти файлы могут содержать:
@@ -377,14 +685,15 @@ debug-*.png
 - пароль;
 - cookies;
 - данные авторизационной сессии;
-- содержимое личного кабинета.
+- содержимое личного кабинета;
+- учебные материалы.
 
-## Ограничения первой версии
+## Ограничения версии 0.2.0
 
-Первая версия не умеет:
+Версия 0.2.0 не умеет:
 
-- скачивать файлы заданий;
-- автоматически определять все задания по курсу;
+- скачивать весь курс одной командой;
+- автоматически выбирать нужное задание по названию;
 - отправлять готовые работы;
 - работать через удалённый HTTPS MCP;
 - реализовывать OAuth;
@@ -393,21 +702,22 @@ debug-*.png
 
 ## План развития
 
-### v0.2
-
-- добавить `list_assignments(courseUrl)`;
-- добавить скачивание файлов задания;
-- добавить сохранение HTML/текста задания;
-- добавить нормальный debug mode.
-
 ### v0.3
 
-- добавить `download_assignment_files`;
-- добавить `prepare_assignment_context`;
-- добавить парсинг дедлайнов;
-- добавить фильтрацию активных заданий.
+- добавить `download_course_materials(courseUrl)` с явным подтверждением;
+- добавить фильтр по типам модулей: `resource`, `assign`, `quiz`;
+- добавить поиск модуля по названию;
+- добавить сохранение JSON-индекса курса;
+- добавить защиту от повторного скачивания уже скачанных файлов.
 
 ### v0.4
+
+- добавить парсинг дедлайнов;
+- добавить список активных заданий;
+- добавить `prepare_assignment_context`;
+- добавить чтение скачанных PDF/DOCX/TXT.
+
+### v0.5
 
 - добавить remote HTTP MCP;
 - добавить HTTPS;

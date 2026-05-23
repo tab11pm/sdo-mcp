@@ -3,3 +3,4 @@ storage/
 downloads/
 node_modules/
 dist/
+debug*

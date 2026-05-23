@@ -4,7 +4,12 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 
 import { getSdoPage } from './browser.js'
-import { ensureLoggedIn, listCourses } from './sdo.js'
+import {
+	downloadSdoModuleFiles,
+	ensureLoggedIn,
+	listCourseModules,
+	listCourses,
+} from './sdo.js'
 
 const server = new McpServer({
 	name: 'custom-sdo-mcp',
@@ -58,6 +63,62 @@ server.tool(
 					{
 						type: 'text',
 						text,
+					},
+				],
+			}
+		} finally {
+			await context.close()
+		}
+	},
+)
+
+server.tool(
+	'download_module_files',
+	'Скачать файлы только из одного конкретного модуля SDO TUSUR: resource или assign',
+	{
+		moduleUrl: z.string().url(),
+	},
+	async ({ moduleUrl }) => {
+		const { context, page } = await getSdoPage()
+
+		try {
+			await ensureLoggedIn(page, context)
+
+			const result = await downloadSdoModuleFiles(page, moduleUrl)
+
+			return {
+				content: [
+					{
+						type: 'text',
+						text: JSON.stringify(result, null, 2),
+					},
+				],
+			}
+		} finally {
+			await context.close()
+		}
+	},
+)
+
+server.tool(
+	'list_course_modules',
+	'Получить список материалов и заданий на странице курса SDO TUSUR',
+	{
+		courseUrl: z.string().url(),
+	},
+	async ({ courseUrl }) => {
+		const { context, page } = await getSdoPage()
+
+		try {
+			await ensureLoggedIn(page, context)
+
+			const result = await listCourseModules(page, courseUrl)
+
+			return {
+				content: [
+					{
+						type: 'text',
+						text: JSON.stringify(result, null, 2),
 					},
 				],
 			}

@@ -17,9 +17,12 @@ export async function getSdoPage(): Promise<{
 		await fs.access(AUTH_PATH)
 		context = await browser.newContext({
 			storageState: AUTH_PATH,
+			acceptDownloads: true,
 		})
 	} catch {
-		context = await browser.newContext()
+		context = await browser.newContext({
+			acceptDownloads: true,
+		})
 	}
 
 	const page = await context.newPage()
