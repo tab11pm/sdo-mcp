@@ -77,41 +77,10 @@ profile.tusur.ru / sdo.tusur.ru
 
 ## Установка
 
-Создать проект:
-
-```powershell
-mkdir sdo_mcp
-cd sdo_mcp
-npm init -y
-```
-
 Установить зависимости:
 
 ```powershell
-npm install @modelcontextprotocol/sdk playwright zod dotenv
-npm install -D typescript tsx @types/node
-npx playwright install chromium
-```
-
-Создать TypeScript-конфиг:
-
-```powershell
-npx tsc --init
-```
-
-## package.json
-
-В `package.json` должны быть указаны:
-
-```json
-{
-	"type": "module",
-	"scripts": {
-		"dev": "tsx src/index.ts",
-		"build": "tsc",
-		"start": "node dist/index.js"
-	}
-}
+npm install
 ```
 
 ## Настройка .env
@@ -195,18 +164,6 @@ npm run build
 
 ```text
 dist/index.js
-```
-
-Проверить:
-
-```powershell
-Test-Path "dist/index.js"
-```
-
-Ожидаемый результат:
-
-```text
-True
 ```
 
 ## Локальный тест без MCP-клиента
