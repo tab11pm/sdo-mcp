@@ -1,0 +1,29 @@
+{
+	"name": "sdo_mcp",
+	"version": "1.0.0",
+	"description": "",
+	"main": "srd/index.js",
+	"scripts": {
+		"dev": "tsx src/index.ts",
+		"build": "tsc",
+		"start": "node dist/index.js",
+		"test": "echo \"Error: no test specified\" && exit 1"
+	},
+	"keywords": [],
+	"author": "",
+	"license": "ISC",
+	"type": "module",
+	"dependencies": {
+		"@modelcontextprotocol/sdk": "^1.29.0",
+		"dotenv": "^17.4.2",
+		"express": "^5.2.1",
+		"playwright": "^1.60.0",
+		"zod": "^4.4.3"
+	},
+	"devDependencies": {
+		"@types/express": "^5.0.6",
+		"@types/node": "^25.9.1",
+		"tsx": "^4.22.3",
+		"typescript": "^6.0.3"
+	}
+}
