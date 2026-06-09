@@ -7,6 +7,7 @@ import { getSdoPage } from './browser.js'
 import {
 	downloadSdoModuleFiles,
 	ensureLoggedIn,
+	findCourseModule,
 	listCourseModules,
 	listCourses,
 } from './sdo.js'
@@ -113,6 +114,35 @@ server.tool(
 			await ensureLoggedIn(page, context)
 
 			const result = await listCourseModules(page, courseUrl)
+
+			return {
+				content: [
+					{
+						type: 'text',
+						text: JSON.stringify(result, null, 2),
+					},
+				],
+			}
+		} finally {
+			await context.close()
+		}
+	},
+)
+
+server.tool(
+	'find_course_module',
+	'Найти материал или задание на странице курса SDO TUSUR по названию',
+	{
+		courseUrl: z.string().url(),
+		query: z.string().min(1),
+	},
+	async ({ courseUrl, query }) => {
+		const { context, page } = await getSdoPage()
+
+		try {
+			await ensureLoggedIn(page, context)
+
+			const result = await findCourseModule(page, courseUrl, query)
 
 			return {
 				content: [

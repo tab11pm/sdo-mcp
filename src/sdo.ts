@@ -729,3 +729,65 @@ async function collectModuleFileLinks(page: Page) {
 
 	return [...unique.values()]
 }
+
+function normalizeSearchText(value: string): string {
+	return value
+		.toLowerCase()
+		.replace(/ё/g, 'е')
+		.replace(/[^\p{L}\p{N}\s]+/gu, ' ')
+		.replace(/\s+/g, ' ')
+		.trim()
+}
+
+function scoreModuleTitle(title: string, query: string): number {
+	const normalizedTitle = normalizeSearchText(title)
+	const normalizedQuery = normalizeSearchText(query)
+
+	if (!normalizedTitle || !normalizedQuery) {
+		return 0
+	}
+
+	if (normalizedTitle === normalizedQuery) {
+		return 100
+	}
+
+	if (normalizedTitle.includes(normalizedQuery)) {
+		return 50
+	}
+
+	const queryWords = normalizedQuery.split(' ').filter(Boolean)
+	let score = 0
+
+	for (const word of queryWords) {
+		if (word.length < 2) continue
+
+		if (normalizedTitle.includes(word)) {
+			score += 1
+		}
+	}
+
+	return score
+}
+
+export async function findCourseModule(
+	page: Page,
+	courseUrl: string,
+	query: string,
+) {
+	const result = await listCourseModules(page, courseUrl)
+
+	const matches = result.modules
+		.map((module) => ({
+			...module,
+			score: scoreModuleTitle(module.title, query),
+		}))
+		.filter((module) => module.score > 0)
+		.sort((a, b) => b.score - a.score)
+
+	return {
+		courseUrl,
+		query,
+		totalModules: result.modules.length,
+		matches,
+	}
+}
