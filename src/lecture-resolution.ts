@@ -27,9 +27,16 @@ export function normalizeSearchText(value: string): string {
 	return value.toLowerCase().trim().replace(/\s+/gu, ' ')
 }
 
-function parseSdoUrl(value: string, pathname: string): URL | undefined {
+const SDO_ORIGIN = 'https://sdo.tusur.ru'
+
+function canonicalizeSdoUrl(
+	value: string,
+	pathname: string,
+): string | undefined {
 	try {
 		const url = new URL(value)
+		const queryKeys = [...url.searchParams.keys()]
+		const ids = url.searchParams.getAll('id')
 
 		if (
 			url.protocol !== 'https:' ||
@@ -39,31 +46,29 @@ function parseSdoUrl(value: string, pathname: string): URL | undefined {
 			url.password !== '' ||
 			url.pathname !== pathname ||
 			url.hash !== '' ||
-			!url.searchParams.get('id')
+			queryKeys.length !== 1 ||
+			queryKeys[0] !== 'id' ||
+			ids.length !== 1 ||
+			!/^[1-9]\d*$/u.test(ids[0] ?? '')
 		) {
 			return undefined
 		}
 
-		return url
+		return `${SDO_ORIGIN}${pathname}?id=${ids[0]}`
 	} catch {
 		return undefined
 	}
 }
 
-function hasSessionToken(url: URL): boolean {
-	return [...url.searchParams.keys()].some(
-		(key) => key.toLowerCase() === 'sessiontoken',
-	)
-}
-
 export function isSdoCourseUrl(value: string): boolean {
-	const url = parseSdoUrl(value, '/course/view.php')
-	return url !== undefined && !hasSessionToken(url)
+	return canonicalizeSdoUrl(value, '/course/view.php') !== undefined
 }
 
 export function isStableBbbActivityUrl(value: string): boolean {
-	const url = parseSdoUrl(value, '/mod/bigbluebuttonbn/view.php')
-	return url !== undefined && !hasSessionToken(url)
+	return (
+		canonicalizeSdoUrl(value, '/mod/bigbluebuttonbn/view.php') !==
+		undefined
+	)
 }
 
 function compareText(left: string, right: string): number {
@@ -101,8 +106,23 @@ export function chooseLectureCandidates(
 	const candidates: LectureCandidate[] = []
 
 	for (const course of courses) {
+		const canonicalCourseUrl = canonicalizeSdoUrl(
+			course.url,
+			'/course/view.php',
+		)
+		if (canonicalCourseUrl === undefined) continue
+
+		const canonicalCourse: CourseRef = {
+			name: course.name,
+			url: canonicalCourseUrl,
+		}
+
 		for (const module of modulesByCourse[course.url] ?? []) {
-			if (!isStableBbbActivityUrl(module.activityUrl)) continue
+			const canonicalActivityUrl = canonicalizeSdoUrl(
+				module.activityUrl,
+				'/mod/bigbluebuttonbn/view.php',
+			)
+			if (canonicalActivityUrl === undefined) continue
 			if (
 				normalizedQuery !== undefined &&
 				!normalizeSearchText(module.name).includes(normalizedQuery)
@@ -110,7 +130,13 @@ export function chooseLectureCandidates(
 				continue
 			}
 
-			candidates.push({ course, module })
+			candidates.push({
+				course: canonicalCourse,
+				module: {
+					name: module.name,
+					activityUrl: canonicalActivityUrl,
+				},
+			})
 		}
 	}
 
