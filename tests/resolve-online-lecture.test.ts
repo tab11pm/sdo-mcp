@@ -66,7 +66,7 @@ describe('resolveOnlineLecture', () => {
 			}),
 		).resolves.toEqual({
 			status: 'resolved',
-			course: { name: algebraCourse.title, url: algebraCourse.url },
+			course: { name: algebraCourse.url, url: algebraCourse.url },
 			module: {
 				name: 'Лекция 1',
 				activityUrl:
@@ -75,8 +75,10 @@ describe('resolveOnlineLecture', () => {
 		})
 	})
 
-	it('inspects a direct course URL even when the landing page omits it', async () => {
-		sdo.listCourses.mockResolvedValue([])
+	it('inspects a direct course URL without reading the landing-page course list', async () => {
+		sdo.listCourses.mockRejectedValue(
+			new Error('landing-page course list unavailable'),
+		)
 		sdo.listBbbCourseModules.mockResolvedValue([
 			{
 				name: 'Лекция 1',
@@ -98,6 +100,7 @@ describe('resolveOnlineLecture', () => {
 					'https://sdo.tusur.ru/mod/bigbluebuttonbn/view.php?id=101',
 			},
 		})
+		expect(sdo.listCourses).not.toHaveBeenCalled()
 	})
 
 	it('normalizes a course query and lecture query before matching', async () => {

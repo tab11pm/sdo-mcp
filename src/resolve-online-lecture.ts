@@ -53,24 +53,16 @@ function validateInput(input: ResolveOnlineLectureInput): void {
 
 function selectCourses(
 	courses: readonly { title: string; url: string }[],
-	input: ResolveOnlineLectureInput,
+	courseQuery: string,
 ): CourseRef[] {
-	const requestedUrl =
-		input.courseUrl === undefined ? undefined : new URL(input.courseUrl).href
-	const normalizedQuery =
-		input.courseQuery === undefined
-			? undefined
-			: normalizeSearchText(input.courseQuery)
+	const normalizedQuery = normalizeSearchText(courseQuery)
 	const selected = new Map<string, CourseRef>()
 
 	for (const course of courses) {
 		if (!course.title || !isSdoCourseUrl(course.url)) continue
 
 		const normalizedUrl = new URL(course.url).href
-		const matches =
-			requestedUrl !== undefined
-				? normalizedUrl === requestedUrl
-				: normalizeSearchText(course.title).includes(normalizedQuery!)
+		const matches = normalizeSearchText(course.title).includes(normalizedQuery)
 
 		if (matches && !selected.has(normalizedUrl)) {
 			selected.set(normalizedUrl, {
@@ -78,13 +70,6 @@ function selectCourses(
 				url: normalizedUrl,
 			})
 		}
-	}
-
-	if (requestedUrl !== undefined && selected.size === 0) {
-		selected.set(requestedUrl, {
-			name: requestedUrl,
-			url: requestedUrl,
-		})
 	}
 
 	return [...selected.values()]
@@ -100,7 +85,15 @@ export async function resolveOnlineLecture(
 		return { status: 'auth_required' }
 	}
 
-	const courses = selectCourses(await listCourses(page), input)
+	const courses =
+		input.courseUrl === undefined
+			? selectCourses(await listCourses(page), input.courseQuery!)
+			: [
+					{
+						name: new URL(input.courseUrl).href,
+						url: new URL(input.courseUrl).href,
+					},
+				]
 	const modulesByCourse: Record<
 		string,
 		ModulesByCourse[string]

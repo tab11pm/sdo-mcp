@@ -87,7 +87,13 @@ export async function getSdoPage(): Promise<{
 		acceptDownloads: true,
 	})
 
-	const page = await context.newPage()
+	let page: Page
+	try {
+		page = await context.newPage()
+	} catch (error) {
+		await context.close()
+		throw error
+	}
 
 	return { context, page, authStatePresent }
 }

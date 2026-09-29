@@ -32,6 +32,7 @@ describe('getSdoPage', () => {
 	let temporaryDirectory: string | undefined
 	const page = { kind: 'page' }
 	const context = {
+		close: vi.fn().mockResolvedValue(undefined),
 		newPage: vi.fn().mockResolvedValue(page),
 	}
 	const browser = {
@@ -126,5 +127,12 @@ describe('getSdoPage', () => {
 
 		await expect(getSdoPage()).rejects.toThrow('browser unavailable')
 		expect(browser.newContext).toHaveBeenCalledTimes(1)
+	})
+
+	it('closes a created context when page creation fails', async () => {
+		context.newPage.mockRejectedValueOnce(new Error('page unavailable'))
+
+		await expect(getSdoPage()).rejects.toThrow('page unavailable')
+		expect(context.close).toHaveBeenCalledOnce()
 	})
 })
