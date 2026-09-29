@@ -80,6 +80,13 @@ function selectCourses(
 		}
 	}
 
+	if (requestedUrl !== undefined && selected.size === 0) {
+		selected.set(requestedUrl, {
+			name: requestedUrl,
+			url: requestedUrl,
+		})
+	}
+
 	return [...selected.values()]
 }
 

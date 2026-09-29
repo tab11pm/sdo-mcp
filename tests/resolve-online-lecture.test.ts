@@ -75,6 +75,31 @@ describe('resolveOnlineLecture', () => {
 		})
 	})
 
+	it('inspects a direct course URL even when the landing page omits it', async () => {
+		sdo.listCourses.mockResolvedValue([])
+		sdo.listBbbCourseModules.mockResolvedValue([
+			{
+				name: 'Лекция 1',
+				activityUrl:
+					'https://sdo.tusur.ru/mod/bigbluebuttonbn/view.php?id=101',
+			},
+		])
+
+		await expect(
+			resolveOnlineLecture(page as never, {
+				courseUrl: algebraCourse.url,
+			}),
+		).resolves.toEqual({
+			status: 'resolved',
+			course: { name: algebraCourse.url, url: algebraCourse.url },
+			module: {
+				name: 'Лекция 1',
+				activityUrl:
+					'https://sdo.tusur.ru/mod/bigbluebuttonbn/view.php?id=101',
+			},
+		})
+	})
+
 	it('normalizes a course query and lecture query before matching', async () => {
 		sdo.listBbbCourseModules.mockResolvedValue([
 		{

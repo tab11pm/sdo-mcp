@@ -159,4 +159,68 @@ describe('resolve_online_lecture MCP boundary', () => {
 		})
 		expect(close).toHaveBeenCalledOnce()
 	})
+
+	it('returns auth_required without reading SDO when auth state is absent', async () => {
+		const close = vi.fn().mockResolvedValue(undefined)
+		browser.getSdoPage.mockResolvedValue({
+			context: { close },
+			page: { kind: 'empty-context-page' },
+			authStatePresent: false,
+		})
+		const [, , handler] = resolutionRegistration().args as [
+			string,
+			unknown,
+			ResolveHandler,
+		]
+
+		await expect(handler({ courseQuery: 'физика' })).resolves.toEqual({
+			content: [
+				{
+					type: 'text',
+					text: JSON.stringify({ status: 'auth_required' }),
+				},
+			],
+		})
+		expect(sdo.hasAuthenticatedSdoSession).not.toHaveBeenCalled()
+		expect(sdo.listCourses).not.toHaveBeenCalled()
+		expect(close).toHaveBeenCalledOnce()
+	})
+
+	it('redacts helper errors at the MCP boundary and closes its context', async () => {
+		const close = vi.fn().mockResolvedValue(undefined)
+		browser.getSdoPage.mockResolvedValue({
+			context: { close },
+			page: { kind: 'contract-page' },
+			authStatePresent: true,
+		})
+		const privateDetail = 'https://bbb2.tusur.ru/b/private-room'
+		sdo.hasAuthenticatedSdoSession.mockRejectedValue(
+			new Error(`navigation failed at ${privateDetail}`),
+		)
+		const [, , handler] = resolutionRegistration().args as [
+			string,
+			unknown,
+			ResolveHandler,
+		]
+
+		await expect(handler({ courseQuery: 'физика' })).rejects.toThrow(
+			/^SDO page unavailable$/u,
+		)
+		expect(close).toHaveBeenCalledOnce()
+	})
+
+	it('redacts browser acquisition errors before a context exists', async () => {
+		browser.getSdoPage.mockRejectedValue(
+			new Error('browser launch failed at /private/local/auth-file'),
+		)
+		const [, , handler] = resolutionRegistration().args as [
+			string,
+			unknown,
+			ResolveHandler,
+		]
+
+		await expect(handler({ courseQuery: 'физика' })).rejects.toThrow(
+			/^SDO page unavailable$/u,
+		)
+	})
 })
