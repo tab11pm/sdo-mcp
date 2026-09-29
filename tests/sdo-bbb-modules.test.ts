@@ -24,13 +24,20 @@ function readModuleFixture(): AnchorFixture[] {
 	)
 }
 
-function sessionPage(url: string, loginFormCount = 0) {
+function sessionPage(
+	url: string,
+	options: { loginFormCount?: number; loginButtonCount?: number } = {},
+) {
 	return {
 		goto: vi.fn().mockResolvedValue(undefined),
 		url: vi.fn().mockReturnValue(url),
-		locator: vi.fn().mockReturnValue({
-			count: vi.fn().mockResolvedValue(loginFormCount),
-		}),
+		locator: vi.fn().mockImplementation((selector: string) => ({
+			count: vi.fn().mockResolvedValue(
+				selector.includes('Вход через кабинет')
+					? (options.loginButtonCount ?? 0)
+					: (options.loginFormCount ?? 0),
+			),
+		})),
 	}
 }
 
@@ -42,7 +49,25 @@ describe('hasAuthenticatedSdoSession', () => {
 	})
 
 	it('rejects a page containing a login form', async () => {
-		const page = sessionPage('https://sdo.tusur.ru/', 1)
+		const page = sessionPage('https://sdo.tusur.ru/', { loginFormCount: 1 })
+
+		await expect(hasAuthenticatedSdoSession(page as never)).resolves.toBe(false)
+	})
+
+	it('rejects the public root containing the TUSUR cabinet login control', async () => {
+		const page = sessionPage('https://sdo.tusur.ru/', {
+			loginButtonCount: 1,
+		})
+
+		await expect(hasAuthenticatedSdoSession(page as never)).resolves.toBe(false)
+	})
+
+	it.each([
+		'https://profile.tusur.ru/en/users/sign_in',
+		'https://sdo.tusur.ru:444/my/',
+		'https://user:secret@sdo.tusur.ru/my/',
+	])('rejects an expired or non-canonical session destination: %s', async (url) => {
+		const page = sessionPage(url)
 
 		await expect(hasAuthenticatedSdoSession(page as never)).resolves.toBe(false)
 	})
@@ -80,6 +105,47 @@ describe('extractBbbModules', () => {
 })
 
 describe('listBbbCourseModules', () => {
+	it.each([
+		'https://example.invalid/course/view.php?id=20',
+		'https://127.0.0.1/course/view.php?id=20',
+		'https://sdo.tusur.ru/mod/resource/view.php?id=20',
+		'https://sdo.tusur.ru/mod/assign/view.php?id=20',
+		'https://user:secret@sdo.tusur.ru/course/view.php?id=20',
+		'https://sdo.tusur.ru/course/view.php?id=20&token=secret',
+		'https://sdo.tusur.ru/course/view.php?id=20&redirect=https%3A%2F%2Fexample.invalid',
+	])('rejects an unsafe course URL before navigation: %s', async (courseUrl) => {
+		const page = {
+			goto: vi.fn(),
+			url: vi.fn(),
+			locator: vi.fn(),
+		}
+
+		await expect(
+			listBbbCourseModules(page as never, courseUrl),
+		).rejects.toThrow('Invalid SDO course URL')
+		expect(page.goto).not.toHaveBeenCalled()
+	})
+
+	it.each([
+		'https://example.invalid/course/view.php?id=20',
+		'https://127.0.0.1/private',
+		'https://sdo.tusur.ru/login/index.php',
+	])('rejects an unsafe redirect before reading anchors: %s', async (redirectUrl) => {
+		const page = {
+			goto: vi.fn().mockResolvedValue(undefined),
+			url: vi.fn().mockReturnValue(redirectUrl),
+			locator: vi.fn(),
+		}
+
+		await expect(
+			listBbbCourseModules(
+				page as never,
+				'https://sdo.tusur.ru/course/view.php?id=20',
+			),
+		).rejects.toThrow('SDO course navigation left the validated course page')
+		expect(page.locator).not.toHaveBeenCalled()
+	})
+
 	it('reads course anchors and returns only de-duplicated stable BBB modules', async () => {
 		const anchors = readModuleFixture().map(({ name, href }) => ({
 			textContent: `  ${name}  `,
@@ -94,6 +160,9 @@ describe('listBbbCourseModules', () => {
 			.mockImplementation(async (readAnchors) => readAnchors(anchors))
 		const page = {
 			goto: vi.fn().mockResolvedValue(undefined),
+			url: vi
+				.fn()
+				.mockReturnValue('https://sdo.tusur.ru/course/view.php?id=20'),
 			locator: vi.fn().mockReturnValue({ evaluateAll }),
 		}
 

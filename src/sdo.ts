@@ -3,6 +3,7 @@ import path from 'node:path'
 import { Page, BrowserContext } from 'playwright'
 import { saveAuthState } from './browser.js'
 import {
+	isSdoCourseUrl,
 	isStableBbbActivityUrl,
 	type BbbModuleRef,
 } from './lecture-resolution.js'
@@ -55,28 +56,50 @@ export async function hasAuthenticatedSdoSession(
 	if (
 		currentUrl.protocol !== 'https:' ||
 		currentUrl.hostname !== 'sdo.tusur.ru' ||
+		currentUrl.port !== '' ||
+		currentUrl.username !== '' ||
+		currentUrl.password !== '' ||
 		/^\/login(?:\/|$)/u.test(currentUrl.pathname)
 	) {
 		return false
 	}
 
-	const loginFormCount = await page
-		.locator(
-			'form[action*="/login"], form:has(input[type="password"]), #login',
-		)
-		.count()
+	const [loginFormCount, loginButtonCount] = await Promise.all([
+		page
+			.locator(
+				'form[action*="/login"], form:has(input[type="password"]), #login',
+			)
+			.count(),
+		page
+			.locator(
+				'a:has-text("Вход через кабинет ТУСУРа"), button:has-text("Вход через кабинет ТУСУРа"), input[value*="Вход через кабинет"]',
+			)
+			.count(),
+	])
 
-	return loginFormCount === 0
+	return loginFormCount === 0 && loginButtonCount === 0
 }
 
 export async function listBbbCourseModules(
 	page: Page,
 	courseUrl: string,
 ): Promise<BbbModuleRef[]> {
+	if (!isSdoCourseUrl(courseUrl)) {
+		throw new Error('Invalid SDO course URL')
+	}
+
 	await page.goto(courseUrl, {
 		waitUntil: 'domcontentloaded',
 		timeout: 30000,
 	})
+
+	const finalUrl = page.url()
+	if (
+		!isSdoCourseUrl(finalUrl) ||
+		new URL(finalUrl).href !== new URL(courseUrl).href
+	) {
+		throw new Error('SDO course navigation left the validated course page')
+	}
 
 	const anchors = await page.locator('a[href]').evaluateAll((links) =>
 		links.map((link) => ({

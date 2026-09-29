@@ -55,7 +55,11 @@ describe('getSdoPage', () => {
 	it('opens the configured auth state and reports it present', async () => {
 		temporaryDirectory = await mkdtemp(path.join(tmpdir(), 'sdo-auth-state-'))
 		const authStatePath = path.join(temporaryDirectory, 'state.json')
-		await writeFile(authStatePath, '{}', 'utf8')
+		await writeFile(
+			authStatePath,
+			JSON.stringify({ cookies: [], origins: [] }),
+			'utf8',
+		)
 		vi.stubEnv('SDO_AUTH_STATE_PATH', authStatePath)
 
 		const result = await getSdoPage()
@@ -78,5 +82,49 @@ describe('getSdoPage', () => {
 		expect(browser.newContext).toHaveBeenCalledWith({
 			acceptDownloads: true,
 		})
+	})
+
+	it.each([
+		['malformed JSON', '{'],
+		['an unusable storage-state shape', '{}'],
+	])('falls back to an empty context for %s', async (_label, contents) => {
+		temporaryDirectory = await mkdtemp(path.join(tmpdir(), 'sdo-auth-state-'))
+		const authStatePath = path.join(temporaryDirectory, 'state.json')
+		await writeFile(authStatePath, contents, 'utf8')
+		vi.stubEnv('SDO_AUTH_STATE_PATH', authStatePath)
+
+		const result = await getSdoPage()
+
+		expect(result).toEqual({ context, page, authStatePresent: false })
+		expect(browser.newContext).toHaveBeenCalledWith({
+			acceptDownloads: true,
+		})
+	})
+
+	it('falls back to an empty context when the configured path is not readable as a file', async () => {
+		temporaryDirectory = await mkdtemp(path.join(tmpdir(), 'sdo-auth-state-'))
+		vi.stubEnv('SDO_AUTH_STATE_PATH', temporaryDirectory)
+
+		const result = await getSdoPage()
+
+		expect(result).toEqual({ context, page, authStatePresent: false })
+		expect(browser.newContext).toHaveBeenCalledWith({
+			acceptDownloads: true,
+		})
+	})
+
+	it('does not misclassify an unrelated context-creation failure as bad auth state', async () => {
+		temporaryDirectory = await mkdtemp(path.join(tmpdir(), 'sdo-auth-state-'))
+		const authStatePath = path.join(temporaryDirectory, 'state.json')
+		await writeFile(
+			authStatePath,
+			JSON.stringify({ cookies: [], origins: [] }),
+			'utf8',
+		)
+		vi.stubEnv('SDO_AUTH_STATE_PATH', authStatePath)
+		browser.newContext.mockRejectedValueOnce(new Error('browser unavailable'))
+
+		await expect(getSdoPage()).rejects.toThrow('browser unavailable')
+		expect(browser.newContext).toHaveBeenCalledTimes(1)
 	})
 })
