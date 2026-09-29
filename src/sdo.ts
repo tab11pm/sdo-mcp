@@ -2,11 +2,91 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { Page, BrowserContext } from 'playwright'
 import { saveAuthState } from './browser.js'
+import {
+	isStableBbbActivityUrl,
+	type BbbModuleRef,
+} from './lecture-resolution.js'
 
 const SDO_URL = process.env.SDO_URL ?? 'https://sdo.tusur.ru'
 const PROFILE_LOGIN_URL =
 	process.env.TUSUR_PROFILE_LOGIN_URL ??
 	'https://profile.tusur.ru/en/users/sign_in'
+
+interface SdoAnchorRef {
+	name: string
+	href: string
+}
+
+export function extractBbbModules(
+	anchors: readonly SdoAnchorRef[],
+): BbbModuleRef[] {
+	const modules = new Map<string, BbbModuleRef>()
+
+	for (const anchor of anchors) {
+		const name = anchor.name.replace(/\s+/gu, ' ').trim()
+		if (!name || !isStableBbbActivityUrl(anchor.href)) continue
+
+		const parsedUrl = new URL(anchor.href)
+		const activityUrl = `https://sdo.tusur.ru/mod/bigbluebuttonbn/view.php?id=${parsedUrl.searchParams.get('id')}`
+
+		if (!modules.has(activityUrl)) {
+			modules.set(activityUrl, { name, activityUrl })
+		}
+	}
+
+	return [...modules.values()]
+}
+
+export async function hasAuthenticatedSdoSession(
+	page: Page,
+): Promise<boolean> {
+	await page.goto(`${SDO_URL}/`, {
+		waitUntil: 'domcontentloaded',
+		timeout: 30000,
+	})
+
+	let currentUrl: URL
+	try {
+		currentUrl = new URL(page.url())
+	} catch {
+		return false
+	}
+
+	if (
+		currentUrl.protocol !== 'https:' ||
+		currentUrl.hostname !== 'sdo.tusur.ru' ||
+		/^\/login(?:\/|$)/u.test(currentUrl.pathname)
+	) {
+		return false
+	}
+
+	const loginFormCount = await page
+		.locator(
+			'form[action*="/login"], form:has(input[type="password"]), #login',
+		)
+		.count()
+
+	return loginFormCount === 0
+}
+
+export async function listBbbCourseModules(
+	page: Page,
+	courseUrl: string,
+): Promise<BbbModuleRef[]> {
+	await page.goto(courseUrl, {
+		waitUntil: 'domcontentloaded',
+		timeout: 30000,
+	})
+
+	const anchors = await page.locator('a[href]').evaluateAll((links) =>
+		links.map((link) => ({
+			name: link.textContent ?? '',
+			href: (link as HTMLAnchorElement).href,
+		})),
+	)
+
+	return extractBbbModules(anchors)
+}
 
 async function isLoggedIntoSdo(page: Page): Promise<boolean> {
 	console.error('Checking SDO login state...')
