@@ -4,6 +4,8 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 
 import { getSdoPage } from './browser.js'
+import type { ResolveOnlineLectureResult } from './lecture-resolution.js'
+import { resolveOnlineLecture } from './resolve-online-lecture.js'
 import {
 	downloadSdoModuleFiles,
 	ensureLoggedIn,
@@ -149,6 +151,50 @@ server.tool(
 					{
 						type: 'text',
 						text: JSON.stringify(result, null, 2),
+					},
+				],
+			}
+		} finally {
+			await context.close()
+		}
+	},
+)
+
+const resolveOnlineLectureInputSchema = z
+	.object({
+		courseUrl: z.string().url().optional(),
+		courseQuery: z.string().trim().min(1).optional(),
+		lectureQuery: z.string().trim().min(1).optional(),
+	})
+	.refine(
+		({ courseUrl, courseQuery }) =>
+			Number(courseUrl !== undefined) + Number(courseQuery !== undefined) ===
+			1,
+		{
+			message: 'Provide exactly one of courseUrl and courseQuery',
+		},
+	)
+
+server.registerTool(
+	'resolve_online_lecture',
+	{
+		description:
+			'Найти BBB-лекцию в SDO по URL или названию курса без автоматического входа',
+		inputSchema: resolveOnlineLectureInputSchema,
+	},
+	async (input) => {
+		const { context, page, authStatePresent } = await getSdoPage()
+
+		try {
+			const result: ResolveOnlineLectureResult = authStatePresent
+				? await resolveOnlineLecture(page, input)
+				: { status: 'auth_required' }
+
+			return {
+				content: [
+					{
+						type: 'text',
+						text: JSON.stringify(result),
 					},
 				],
 			}
