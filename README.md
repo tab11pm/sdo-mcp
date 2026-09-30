@@ -102,6 +102,45 @@ profile.tusur.ru / sdo.tusur.ru
 
 ## Поддерживаемые MCP tools
 
+### resolve_online_lecture
+
+Находит стабильную ссылку на активность BigBlueButton (BBB) в выбранном
+курсе. Tool не выполняет автоматический вход и не возвращает временную ссылку
+на комнату BBB.
+
+Нужно передать ровно один селектор курса:
+
+```json
+{
+	"courseUrl": "https://sdo.tusur.ru/course/view.php?id=21380",
+	"lectureQuery": "лекция 1"
+}
+```
+
+или:
+
+```json
+{
+	"courseQuery": "экономика",
+	"lectureQuery": "лекция 1"
+}
+```
+
+`lectureQuery` необязателен. Результат всегда имеет один из четырёх видов:
+
+```ts
+type ResolveOnlineLectureResult =
+	| { status: 'resolved'; course: CourseRef; module: BbbModuleRef }
+	| { status: 'ambiguous'; candidates: LectureCandidate[] }
+	| { status: 'not_found'; candidates: [] }
+	| { status: 'auth_required' }
+```
+
+При нескольких совпадениях возвращается `ambiguous` со всеми кандидатами в
+детерминированном порядке. Сервер никогда не выбирает первый вариант
+автоматически: выбор должен подтвердить пользователь или вызывающее приложение
+должно повторить запрос с более точным селектором.
+
 ### list_courses
 
 Получает список курсов из SDO.
@@ -323,61 +362,33 @@ module-text.txt
 npm install
 ```
 
-## Настройка .env
+## Безопасная авторизация для поиска лекций
 
-В корне проекта создать файл `.env`:
+Для `resolve_online_lecture` один раз создайте Playwright storage state вручную:
 
-```env
-SDO_URL=https://sdo.tusur.ru
-TUSUR_PROFILE_LOGIN_URL=https://profile.tusur.ru/en/users/sign_in
-SDO_USERNAME=your_login_or_email
-SDO_PASSWORD=your_password
-HEADLESS=false
+```powershell
+New-Item -ItemType Directory -Force storage | Out-Null
+npx playwright codegen --save-storage=storage/auth.json https://sdo.tusur.ru/
 ```
 
-Где:
+В открывшемся браузере войдите в SDO самостоятельно, убедитесь, что виден
+список курсов, и закройте окно Playwright. После этого задайте путь к созданному
+файлу перед запуском MCP-сервера:
 
-- `SDO_URL` — адрес SDO TUSUR;
-- `TUSUR_PROFILE_LOGIN_URL` — адрес страницы входа через профиль ТУСУР;
-- `SDO_USERNAME` — логин или email;
-- `SDO_PASSWORD` — пароль;
-- `HEADLESS=false` — браузер будет открываться визуально.
-
-Для первого тестирования рекомендуется оставить:
-
-```env
-HEADLESS=false
+```powershell
+$env:SDO_AUTH_STATE_PATH = "$PWD/storage/auth.json"
+npm run build
+npm start
 ```
 
-Так можно видеть, где именно останавливается вход.
+Для запуска из MCP-клиента укажите `SDO_AUTH_STATE_PATH` в окружении процесса
+сервера. Лучше использовать абсолютный путь. Если переменная не задана, локальной
+резервной точкой остаётся `storage/auth.json`.
 
-## Авторизация
-
-Вход работает по следующей схеме:
-
-1. Сервер открывает `https://sdo.tusur.ru/`.
-2. Проверяет, видны ли курсы.
-3. Если курсы уже видны, сервер считает пользователя авторизованным.
-4. Если авторизации нет, сервер открывает `https://profile.tusur.ru/en/users/sign_in`.
-5. Заполняет логин и пароль.
-6. После успешного входа пользователь перенаправляется в SDO.
-7. Сервер сохраняет состояние авторизации в `storage/auth.json`.
-
-Файл `storage/auth.json` содержит cookies и данные сессии. Его нельзя публиковать или добавлять в Git.
-
-Сервер не должен начинать вход с:
-
-```text
-https://sdo.tusur.ru/login/index.php
-```
-
-Потому что при наличии токена Moodle может показать страницу выхода или подтверждения смены состояния сессии.
-
-Правильная стартовая страница:
-
-```text
-https://sdo.tusur.ru/
-```
+Storage state содержит cookies и данные сессии. Не публикуйте, не пересылайте и
+не добавляйте этот файл в Git. При отсутствии, повреждении или истечении сессии
+`resolve_online_lecture` вернёт `auth_required`; tool не пытается войти
+автоматически.
 
 ## Важные файлы
 
@@ -386,7 +397,6 @@ src/
   index.ts                    # MCP server и регистрация tools
   browser.ts                  # запуск Playwright и сохранение auth state
   sdo.ts                      # логика входа, курсов, модулей и скачивания
-  test-login.ts               # ручной тест логина без MCP-клиента
   test-module-download.ts     # ручной тест скачивания одного модуля
 
 storage/
@@ -408,8 +418,12 @@ node_modules/
 dist/
 .env
 storage/
+auth-state*.json
+playwright-profile*/
 downloads/
-debug-*.png
+screenshots/
+diagnostics/
+debug*.png
 ```
 
 ## Сборка
@@ -435,14 +449,6 @@ Test-Path "dist/index.js"
 ```text
 True
 ```
-
-## Локальный тест логина без MCP-клиента
-
-```powershell
-npx tsx src/test-login.ts
-```
-
-Если всё работает, откроется браузер, произойдёт вход в SDO, а в терминале появится список курсов.
 
 ## Локальный тест скачивания одного ресурса
 
@@ -491,6 +497,7 @@ list_courses
 list_course_modules
 get_assignment_details
 download_module_files
+resolve_online_lecture
 ```
 
 ## Подключение к LM Studio на Windows
@@ -513,7 +520,8 @@ download_module_files
 
 - использовать полный путь к `node.exe`;
 - использовать прямые слэши `/`;
-- указать правильный `cwd`, чтобы `.env` был найден;
+- указать правильный `cwd`;
+- передать серверу `SDO_AUTH_STATE_PATH` для `resolve_online_lecture`;
 - перед подключением выполнить `npm run build`.
 
 ## Важное правило для stdio MCP
@@ -569,7 +577,8 @@ Unexpected token 'L', "Logging in"... is not valid JSON
 
 - использовать полный путь к `node.exe`;
 - использовать прямые слэши `/`;
-- указать правильный `cwd`, чтобы `.env` был найден;
+- указать правильный `cwd`;
+- передать серверу `SDO_AUTH_STATE_PATH` для `resolve_online_lecture`;
 - перед подключением выполнить `npm run build`.
 
 ## Типичные ошибки
