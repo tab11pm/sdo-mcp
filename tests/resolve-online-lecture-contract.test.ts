@@ -128,10 +128,12 @@ describe('resolve_online_lecture MCP boundary', () => {
 		).toBe(true)
 	})
 
-	it('returns only the exact discriminated result JSON and closes its context', async () => {
+	it('returns only the exact discriminated result JSON and closes owned resources', async () => {
 		const close = vi.fn().mockResolvedValue(undefined)
+		const closeBrowser = vi.fn().mockResolvedValue(undefined)
 		const page = { kind: 'contract-page' }
 		browser.getSdoPage.mockResolvedValue({
+			browser: { close: closeBrowser },
 			context: { close },
 			page,
 			authStatePresent: true,
@@ -158,11 +160,14 @@ describe('resolve_online_lecture MCP boundary', () => {
 			content: [{ type: 'text', text: JSON.stringify(expected) }],
 		})
 		expect(close).toHaveBeenCalledOnce()
+		expect(closeBrowser).toHaveBeenCalledOnce()
 	})
 
-	it('returns auth_required without reading SDO when auth state is absent', async () => {
+	it('returns auth_required without reading SDO and closes owned resources', async () => {
 		const close = vi.fn().mockResolvedValue(undefined)
+		const closeBrowser = vi.fn().mockResolvedValue(undefined)
 		browser.getSdoPage.mockResolvedValue({
+			browser: { close: closeBrowser },
 			context: { close },
 			page: { kind: 'empty-context-page' },
 			authStatePresent: false,
@@ -184,11 +189,14 @@ describe('resolve_online_lecture MCP boundary', () => {
 		expect(sdo.hasAuthenticatedSdoSession).not.toHaveBeenCalled()
 		expect(sdo.listCourses).not.toHaveBeenCalled()
 		expect(close).toHaveBeenCalledOnce()
+		expect(closeBrowser).toHaveBeenCalledOnce()
 	})
 
-	it('redacts helper errors at the MCP boundary and closes its context', async () => {
+	it('redacts helper errors at the MCP boundary and closes owned resources', async () => {
 		const close = vi.fn().mockResolvedValue(undefined)
+		const closeBrowser = vi.fn().mockResolvedValue(undefined)
 		browser.getSdoPage.mockResolvedValue({
+			browser: { close: closeBrowser },
 			context: { close },
 			page: { kind: 'contract-page' },
 			authStatePresent: true,
@@ -207,6 +215,7 @@ describe('resolve_online_lecture MCP boundary', () => {
 			/^SDO page unavailable$/u,
 		)
 		expect(close).toHaveBeenCalledOnce()
+		expect(closeBrowser).toHaveBeenCalledOnce()
 	})
 
 	it('redacts browser acquisition errors before a context exists', async () => {

@@ -63,7 +63,7 @@ function resolveHandler(): ResolveHandler {
 
 const courseUrl = 'https://sdo.tusur.ru/course/view.php?id=20'
 
-describe('resolve_online_lecture context cleanup', () => {
+describe('resolve_online_lecture resource cleanup', () => {
 	beforeAll(async () => {
 		await import('../src/index.js')
 	})
@@ -118,7 +118,9 @@ describe('resolve_online_lecture context cleanup', () => {
 		modules,
 	}) => {
 		const close = vi.fn().mockResolvedValue(undefined)
+		const closeBrowser = vi.fn().mockResolvedValue(undefined)
 		browser.getSdoPage.mockResolvedValue({
+			browser: { close: closeBrowser },
 			context: { close },
 			page: { kind: `${status}-page` },
 			authStatePresent,
@@ -129,11 +131,14 @@ describe('resolve_online_lecture context cleanup', () => {
 
 		expect(JSON.parse(response.content[0]!.text)).toMatchObject({ status })
 		expect(close).toHaveBeenCalledOnce()
+		expect(closeBrowser).toHaveBeenCalledOnce()
 	})
 
 	it('closes its context when reading course modules fails', async () => {
 		const close = vi.fn().mockResolvedValue(undefined)
+		const closeBrowser = vi.fn().mockResolvedValue(undefined)
 		browser.getSdoPage.mockResolvedValue({
+			browser: { close: closeBrowser },
 			context: { close },
 			page: { kind: 'module-read-error-page' },
 			authStatePresent: true,
@@ -146,5 +151,6 @@ describe('resolve_online_lecture context cleanup', () => {
 			'SDO page unavailable',
 		)
 		expect(close).toHaveBeenCalledOnce()
+		expect(closeBrowser).toHaveBeenCalledOnce()
 	})
 })

@@ -1,5 +1,10 @@
 import fs from 'node:fs/promises'
-import { chromium, type BrowserContext, type Page } from 'playwright'
+import {
+	chromium,
+	type Browser,
+	type BrowserContext,
+	type Page,
+} from 'playwright'
 
 const AUTH_PATH = 'storage/auth.json'
 
@@ -71,6 +76,7 @@ export function resolveAuthStatePath(env: AuthStateEnvironment): string {
 }
 
 export async function getSdoPage(): Promise<{
+	browser: Browser
 	context: BrowserContext
 	page: Page
 	authStatePresent: boolean
@@ -78,24 +84,30 @@ export async function getSdoPage(): Promise<{
 	const browser = await chromium.launch({
 		headless: process.env.HEADLESS === 'true',
 	})
-
-	const authStatePath = resolveAuthStatePath(process.env)
-	const authStatePresent = await hasUsableAuthState(authStatePath)
-
-	const context = await browser.newContext({
-		...(authStatePresent ? { storageState: authStatePath } : {}),
-		acceptDownloads: true,
-	})
-
-	let page: Page
+	let context: BrowserContext | undefined
 	try {
-		page = await context.newPage()
+		const authStatePath = resolveAuthStatePath(process.env)
+		const authStatePresent = await hasUsableAuthState(authStatePath)
+
+		context = await browser.newContext({
+			...(authStatePresent ? { storageState: authStatePath } : {}),
+			acceptDownloads: true,
+		})
+		const page = await context.newPage()
+
+		return { browser, context, page, authStatePresent }
 	} catch (error) {
-		await context.close()
+		if (context !== undefined) {
+			try {
+				await context.close()
+			} finally {
+				await browser.close()
+			}
+		} else {
+			await browser.close()
+		}
 		throw error
 	}
-
-	return { context, page, authStatePresent }
 }
 
 export async function saveAuthState(context: BrowserContext) {

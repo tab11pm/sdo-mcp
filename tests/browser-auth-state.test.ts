@@ -36,6 +36,7 @@ describe('getSdoPage', () => {
 		newPage: vi.fn().mockResolvedValue(page),
 	}
 	const browser = {
+		close: vi.fn().mockResolvedValue(undefined),
 		newContext: vi.fn().mockResolvedValue(context),
 	}
 
@@ -65,7 +66,7 @@ describe('getSdoPage', () => {
 
 		const result = await getSdoPage()
 
-		expect(result).toEqual({ context, page, authStatePresent: true })
+		expect(result).toEqual({ browser, context, page, authStatePresent: true })
 		expect(browser.newContext).toHaveBeenCalledWith({
 			storageState: authStatePath,
 			acceptDownloads: true,
@@ -79,7 +80,7 @@ describe('getSdoPage', () => {
 
 		const result = await getSdoPage()
 
-		expect(result).toEqual({ context, page, authStatePresent: false })
+		expect(result).toEqual({ browser, context, page, authStatePresent: false })
 		expect(browser.newContext).toHaveBeenCalledWith({
 			acceptDownloads: true,
 		})
@@ -96,7 +97,7 @@ describe('getSdoPage', () => {
 
 		const result = await getSdoPage()
 
-		expect(result).toEqual({ context, page, authStatePresent: false })
+		expect(result).toEqual({ browser, context, page, authStatePresent: false })
 		expect(browser.newContext).toHaveBeenCalledWith({
 			acceptDownloads: true,
 		})
@@ -108,7 +109,7 @@ describe('getSdoPage', () => {
 
 		const result = await getSdoPage()
 
-		expect(result).toEqual({ context, page, authStatePresent: false })
+		expect(result).toEqual({ browser, context, page, authStatePresent: false })
 		expect(browser.newContext).toHaveBeenCalledWith({
 			acceptDownloads: true,
 		})
@@ -127,6 +128,7 @@ describe('getSdoPage', () => {
 
 		await expect(getSdoPage()).rejects.toThrow('browser unavailable')
 		expect(browser.newContext).toHaveBeenCalledTimes(1)
+		expect(browser.close).toHaveBeenCalledOnce()
 	})
 
 	it('closes a created context when page creation fails', async () => {
@@ -134,5 +136,6 @@ describe('getSdoPage', () => {
 
 		await expect(getSdoPage()).rejects.toThrow('page unavailable')
 		expect(context.close).toHaveBeenCalledOnce()
+		expect(browser.close).toHaveBeenCalledOnce()
 	})
 })

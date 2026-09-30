@@ -183,13 +183,10 @@ server.registerTool(
 		inputSchema: resolveOnlineLectureInputSchema,
 	},
 	async (input) => {
-		let context:
-			| Awaited<ReturnType<typeof getSdoPage>>['context']
-			| undefined
+		let sdoPage: Awaited<ReturnType<typeof getSdoPage>> | undefined
 
 		try {
-			const sdoPage = await getSdoPage()
-			context = sdoPage.context
+			sdoPage = await getSdoPage()
 			const result: ResolveOnlineLectureResult = sdoPage.authStatePresent
 				? await resolveOnlineLecture(sdoPage.page, input)
 				: { status: 'auth_required' }
@@ -205,9 +202,13 @@ server.registerTool(
 		} catch {
 			throw new Error('SDO page unavailable')
 		} finally {
-			if (context !== undefined) {
+			if (sdoPage !== undefined) {
 				try {
-					await context.close()
+					try {
+						await sdoPage.context.close()
+					} finally {
+						await sdoPage.browser.close()
+					}
 				} catch {
 					throw new Error('SDO page unavailable')
 				}
