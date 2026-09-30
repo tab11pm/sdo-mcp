@@ -42,7 +42,7 @@ function sessionPage(
 		url: vi.fn().mockReturnValue(url),
 		locator: vi.fn().mockImplementation((selector: string) => ({
 			count: vi.fn().mockResolvedValue(
-				selector.includes('logout.php') || selector.includes('.usermenu')
+				selector === 'a[href*="/login/logout.php"]'
 					? (options.authenticatedMarkerCount ?? 0)
 					: selector.includes('Вход через кабинет') ||
 							selector.includes('Log in')
@@ -217,7 +217,9 @@ describe('listBbbCourseModules', () => {
 					: {
 							count: vi
 								.fn()
-								.mockResolvedValue(selector.includes('logout.php') ? 1 : 0),
+								.mockResolvedValue(
+									selector === 'a[href*="/login/logout.php"]' ? 1 : 0,
+								),
 						},
 			),
 		}
