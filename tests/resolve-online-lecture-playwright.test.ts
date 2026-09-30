@@ -52,6 +52,52 @@ describe('real Playwright authentication boundaries', () => {
 		}
 	})
 
+	for (const stage of ['root', 'course', 'repeated root'] as const) {
+		it.each([
+			['Russian guest', '<div class="usermenu"><span class="login">Вы зашли гостем (<a href="/login/index.php">Войти</a>)</span></div>'],
+			['untranslated login link', '<div data-region="user-menu"><a href="/login/index.php">Anmelden</a></div>'],
+			['guest notice without a link', '<div id="user-menu-toggle">You are not logged in.</div>'],
+		])('returns auth_required for %s during ' + stage + ' discovery despite visible BBB links', async (_label, guestMarkup) => {
+			let requests = 0
+			const { context, page } = await interceptedPage(browser, async (_url, route) => {
+				requests += 1
+				await route.fulfill({
+					contentType: 'text/html; charset=utf-8',
+					body: stage !== 'root' && requests === 1
+						? authenticatedHtml
+						: `${guestMarkup}<a href="/mod/bigbluebuttonbn/view.php?id=201">Lecture</a>`,
+				})
+			})
+			try {
+				await expect(resolveOnlineLecture(page, stage === 'repeated root'
+					? { courseQuery: 'physics' }
+					: { courseUrl })).resolves.toEqual({ status: 'auth_required' })
+			} finally {
+				await context.close()
+			}
+		})
+
+		it('rejects generic user-menu markup without session evidence during ' + stage + ' discovery', async () => {
+			let requests = 0
+			const { context, page } = await interceptedPage(browser, async (_url, route) => {
+				requests += 1
+				await route.fulfill({
+					contentType: 'text/html',
+					body: stage !== 'root' && requests === 1
+						? authenticatedHtml
+						: '<div class="usermenu" data-region="user-menu"><button id="user-menu-toggle">Menu</button></div><a href="/mod/bigbluebuttonbn/view.php?id=201">Lecture</a>',
+				})
+			})
+			try {
+				await expect(resolveOnlineLecture(page, stage === 'repeated root'
+					? { courseQuery: 'physics' }
+					: { courseUrl })).rejects.toThrow('SDO page unavailable')
+			} finally {
+				await context.close()
+			}
+		})
+	}
+
 	it('returns auth_required for the Russian guest banner even with user-menu chrome', async () => {
 		const russianGuestHtml = `<!doctype html>
 <html><body>
@@ -77,6 +123,31 @@ describe('real Playwright authentication boundaries', () => {
 		}
 	})
 
+	it('returns auth_required for the Russian guest banner at the course URL', async () => {
+		const russianGuestHtml = `<!doctype html>
+<html><body>
+	<button id="user-menu-toggle">Guest menu</button>
+	<span class="login">Вы зашли гостем (<a href="/login/index.php">Войти</a>)</span>
+</body></html>`
+		const { context, page } = await interceptedPage(
+			browser,
+			async (url, route) => {
+				await route.fulfill({
+					headers: { 'content-type': 'text/html; charset=utf-8' },
+					body: url === rootUrl ? authenticatedHtml : russianGuestHtml,
+				})
+			},
+		)
+
+		try {
+			await expect(
+				resolveOnlineLecture(page, { courseUrl }),
+			).resolves.toEqual({ status: 'auth_required' })
+		} finally {
+			await context.close()
+		}
+	})
+
 	it('rejects same-URL HTTP 200 maintenance HTML as unavailable', async () => {
 		const { context, page } = await interceptedPage(
 			browser,
@@ -84,6 +155,27 @@ describe('real Playwright authentication boundaries', () => {
 				await route.fulfill({
 					contentType: 'text/html',
 					body: '<h1>Maintenance</h1>',
+				})
+			},
+		)
+
+		try {
+			await expect(
+				resolveOnlineLecture(page, { courseUrl }),
+			).rejects.toThrow('SDO page unavailable')
+		} finally {
+			await context.close()
+		}
+	})
+
+	it('rejects HTTP 200 maintenance HTML at the course URL as unavailable', async () => {
+		const { context, page } = await interceptedPage(
+			browser,
+			async (url, route) => {
+				await route.fulfill({
+					contentType: 'text/html',
+					body:
+						url === rootUrl ? authenticatedHtml : '<h1>Maintenance</h1>',
 				})
 			},
 		)

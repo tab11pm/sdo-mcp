@@ -23,6 +23,7 @@ interface SdoAnchorRef {
 }
 
 const LOGIN_CONTROL_SELECTOR = [
+	'a[href*="/login"]:not([href*="/login/logout.php"]):visible',
 	'a[href*="/login/index.php"]:has-text("Log in")',
 	'a[href*="/login/index.php"]:has-text("Вход")',
 	'a[href*="/login/index.php"]:has-text("Войти")',
@@ -40,9 +41,6 @@ const GUEST_TEXT_SELECTOR = [
 
 const AUTHENTICATED_CONTROL_SELECTOR = [
 	'a[href*="/login/logout.php"]',
-	'.usermenu',
-	'#user-menu-toggle',
-	'[data-region="user-menu"]',
 ].join(', ')
 
 function isAuthenticationDestination(value: string): boolean {
