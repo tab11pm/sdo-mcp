@@ -78,6 +78,10 @@ async function readLoginControlCount(page: Page): Promise<number> {
 	return loginFormCount + loginControlCount
 }
 
+async function hasAuthenticatedControl(page: Page): Promise<boolean> {
+	return (await page.locator(AUTHENTICATED_CONTROL_SELECTOR).count()) > 0
+}
+
 async function isAuthenticatedSdoDocument(
 	page: Page,
 	response: Awaited<ReturnType<Page['goto']>> | undefined,
@@ -101,10 +105,16 @@ async function isAuthenticatedSdoDocument(
 	) {
 		throw new SdoPageUnavailableError()
 	}
+	if (
+		currentUrl.pathname !== '/' &&
+		!/^\/my(?:\/|$)/u.test(currentUrl.pathname)
+	) {
+		throw new SdoPageUnavailableError()
+	}
 
 	if ((await readLoginControlCount(page)) > 0) return false
 
-	return (await page.locator(AUTHENTICATED_CONTROL_SELECTOR).count()) > 0
+	return hasAuthenticatedControl(page)
 }
 
 export function extractBbbModules(
@@ -163,6 +173,9 @@ export async function listBbbCourseModules(
 		throw new Error('SDO course navigation left the validated course page')
 	}
 	if ((await readLoginControlCount(page)) > 0) {
+		throw new SdoAuthenticationRequiredError()
+	}
+	if (!(await hasAuthenticatedControl(page))) {
 		throw new SdoAuthenticationRequiredError()
 	}
 

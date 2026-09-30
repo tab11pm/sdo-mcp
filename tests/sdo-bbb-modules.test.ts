@@ -30,10 +30,15 @@ function sessionPage(
 		loginFormCount?: number
 		loginButtonCount?: number
 		authenticatedMarkerCount?: number
+		responseOk?: boolean
 	} = {},
 ) {
 	return {
-		goto: vi.fn().mockResolvedValue(undefined),
+		goto: vi.fn().mockResolvedValue(
+			options.responseOk === undefined
+				? undefined
+				: { ok: () => options.responseOk },
+		),
 		url: vi.fn().mockReturnValue(url),
 		locator: vi.fn().mockImplementation((selector: string) => ({
 			count: vi.fn().mockResolvedValue(
@@ -92,6 +97,16 @@ describe('hasAuthenticatedSdoSession', () => {
 		})
 
 		await expect(hasAuthenticatedSdoSession(page as never)).resolves.toBe(true)
+	})
+
+	it('rejects an unexpected same-origin document as unavailable', async () => {
+		const page = sessionPage('https://sdo.tusur.ru/maintenance/', {
+			responseOk: true,
+		})
+
+		await expect(hasAuthenticatedSdoSession(page as never)).rejects.toThrow(
+			'SDO page unavailable',
+		)
 	})
 })
 
@@ -199,7 +214,11 @@ describe('listBbbCourseModules', () => {
 			locator: vi.fn().mockImplementation((selector: string) =>
 				selector === 'a[href]'
 					? { evaluateAll }
-					: { count: vi.fn().mockResolvedValue(0) },
+					: {
+							count: vi
+								.fn()
+								.mockResolvedValue(selector.includes('logout.php') ? 1 : 0),
+						},
 			),
 		}
 
