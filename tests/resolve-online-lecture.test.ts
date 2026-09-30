@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const sdo = vi.hoisted(() => ({
 	hasAuthenticatedSdoSession: vi.fn(),
+	listAuthenticatedCourses: vi.fn(),
 	listCourses: vi.fn(),
 	listBbbCourseModules: vi.fn(),
 }))
@@ -25,7 +26,10 @@ describe('resolveOnlineLecture', () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
 		sdo.hasAuthenticatedSdoSession.mockResolvedValue(true)
-		sdo.listCourses.mockResolvedValue([algebraCourse, physicsCourse])
+		sdo.listAuthenticatedCourses.mockResolvedValue([
+			algebraCourse,
+			physicsCourse,
+		])
 		sdo.listBbbCourseModules.mockResolvedValue([])
 	})
 
@@ -76,6 +80,9 @@ describe('resolveOnlineLecture', () => {
 	})
 
 	it('inspects a direct course URL without reading the landing-page course list', async () => {
+		sdo.listAuthenticatedCourses.mockRejectedValue(
+			new Error('authenticated course list unavailable'),
+		)
 		sdo.listCourses.mockRejectedValue(
 			new Error('landing-page course list unavailable'),
 		)
@@ -100,6 +107,7 @@ describe('resolveOnlineLecture', () => {
 					'https://sdo.tusur.ru/mod/bigbluebuttonbn/view.php?id=101',
 			},
 		})
+		expect(sdo.listAuthenticatedCourses).not.toHaveBeenCalled()
 		expect(sdo.listCourses).not.toHaveBeenCalled()
 	})
 
@@ -136,7 +144,7 @@ describe('resolveOnlineLecture', () => {
 	})
 
 	it('returns matching lectures from multiple courses as ambiguous', async () => {
-		sdo.listCourses.mockResolvedValue([
+		sdo.listAuthenticatedCourses.mockResolvedValue([
 			{ title: 'Физика — ИРЭТ', url: algebraCourse.url },
 			{ title: 'Физика — ФСУ', url: physicsCourse.url },
 		])

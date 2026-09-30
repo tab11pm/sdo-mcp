@@ -24,6 +24,7 @@ const sdo = vi.hoisted(() => ({
 	ensureLoggedIn: vi.fn(),
 	findCourseModule: vi.fn(),
 	hasAuthenticatedSdoSession: vi.fn(),
+	listAuthenticatedCourses: vi.fn(),
 	listBbbCourseModules: vi.fn(),
 	listCourseModules: vi.fn(),
 	listCourses: vi.fn(),

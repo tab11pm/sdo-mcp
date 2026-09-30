@@ -69,6 +69,13 @@ async function hasUsableAuthState(authStatePath: string): Promise<boolean> {
 	}
 }
 
+function isStorageStateRestoreError(error: unknown): boolean {
+	return (
+		error instanceof Error &&
+		error.message.includes('Error setting storage state')
+	)
+}
+
 export function resolveAuthStatePath(env: AuthStateEnvironment): string {
 	const configuredPath = env.SDO_AUTH_STATE_PATH
 
@@ -87,12 +94,21 @@ export async function getSdoPage(): Promise<{
 	let context: BrowserContext | undefined
 	try {
 		const authStatePath = resolveAuthStatePath(process.env)
-		const authStatePresent = await hasUsableAuthState(authStatePath)
+		let authStatePresent = await hasUsableAuthState(authStatePath)
 
-		context = await browser.newContext({
-			...(authStatePresent ? { storageState: authStatePath } : {}),
-			acceptDownloads: true,
-		})
+		try {
+			context = await browser.newContext({
+				...(authStatePresent ? { storageState: authStatePath } : {}),
+				acceptDownloads: true,
+			})
+		} catch (error) {
+			if (!authStatePresent || !isStorageStateRestoreError(error)) {
+				throw error
+			}
+
+			authStatePresent = false
+			context = await browser.newContext({ acceptDownloads: true })
+		}
 		const page = await context.newPage()
 
 		return { browser, context, page, authStatePresent }

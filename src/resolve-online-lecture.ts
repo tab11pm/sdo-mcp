@@ -11,8 +11,9 @@ import {
 import {
 	hasAuthenticatedSdoSession,
 	listBbbCourseModules,
-	listCourses,
+	listAuthenticatedCourses,
 } from './sdo.js'
+import { SdoAuthenticationRequiredError } from './sdo-session-errors.js'
 
 export interface ResolveOnlineLectureInput {
 	courseUrl?: string
@@ -85,27 +86,37 @@ export async function resolveOnlineLecture(
 		return { status: 'auth_required' }
 	}
 
-	const courses =
-		input.courseUrl === undefined
-			? selectCourses(await listCourses(page), input.courseQuery!)
-			: [
-					{
-						name: new URL(input.courseUrl).href,
-						url: new URL(input.courseUrl).href,
-					},
-				]
-	const modulesByCourse: Record<
-		string,
-		ModulesByCourse[string]
-	> = {}
+	try {
+		const courses =
+			input.courseUrl === undefined
+				? selectCourses(
+						await listAuthenticatedCourses(page),
+						input.courseQuery!,
+					)
+				: [
+						{
+							name: new URL(input.courseUrl).href,
+							url: new URL(input.courseUrl).href,
+						},
+					]
+		const modulesByCourse: Record<
+			string,
+			ModulesByCourse[string]
+		> = {}
 
-	for (const course of courses) {
-		modulesByCourse[course.url] = await listBbbCourseModules(page, course.url)
+		for (const course of courses) {
+			modulesByCourse[course.url] = await listBbbCourseModules(page, course.url)
+		}
+
+		return chooseLectureCandidates(
+			courses,
+			modulesByCourse,
+			input.lectureQuery,
+		)
+	} catch (error) {
+		if (error instanceof SdoAuthenticationRequiredError) {
+			return { status: 'auth_required' }
+		}
+		throw error
 	}
-
-	return chooseLectureCandidates(
-		courses,
-		modulesByCourse,
-		input.lectureQuery,
-	)
 }

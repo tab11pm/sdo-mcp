@@ -26,14 +26,21 @@ function readModuleFixture(): AnchorFixture[] {
 
 function sessionPage(
 	url: string,
-	options: { loginFormCount?: number; loginButtonCount?: number } = {},
+	options: {
+		loginFormCount?: number
+		loginButtonCount?: number
+		authenticatedMarkerCount?: number
+	} = {},
 ) {
 	return {
 		goto: vi.fn().mockResolvedValue(undefined),
 		url: vi.fn().mockReturnValue(url),
 		locator: vi.fn().mockImplementation((selector: string) => ({
 			count: vi.fn().mockResolvedValue(
-				selector.includes('Вход через кабинет')
+				selector.includes('logout.php') || selector.includes('.usermenu')
+					? (options.authenticatedMarkerCount ?? 0)
+					: selector.includes('Вход через кабинет') ||
+							selector.includes('Log in')
 					? (options.loginButtonCount ?? 0)
 					: (options.loginFormCount ?? 0),
 			),
@@ -62,18 +69,27 @@ describe('hasAuthenticatedSdoSession', () => {
 		await expect(hasAuthenticatedSdoSession(page as never)).resolves.toBe(false)
 	})
 
-	it.each([
-		'https://profile.tusur.ru/en/users/sign_in',
-		'https://sdo.tusur.ru:444/my/',
-		'https://user:secret@sdo.tusur.ru/my/',
-	])('rejects an expired or non-canonical session destination: %s', async (url) => {
-		const page = sessionPage(url)
+	it('rejects an expired profile-login destination', async () => {
+		const page = sessionPage('https://profile.tusur.ru/en/users/sign_in')
 
 		await expect(hasAuthenticatedSdoSession(page as never)).resolves.toBe(false)
 	})
 
-	it('accepts an SDO page without a login route or form', async () => {
-		const page = sessionPage('https://sdo.tusur.ru/my/')
+	it.each([
+		'https://sdo.tusur.ru:444/my/',
+		'https://user:secret@sdo.tusur.ru/my/',
+	])('rejects a non-canonical session destination as unavailable: %s', async (url) => {
+		const page = sessionPage(url)
+
+		await expect(hasAuthenticatedSdoSession(page as never)).rejects.toThrow(
+			'SDO page unavailable',
+		)
+	})
+
+	it('accepts an SDO page with a positive authenticated-session marker', async () => {
+		const page = sessionPage('https://sdo.tusur.ru/my/', {
+			authenticatedMarkerCount: 1,
+		})
 
 		await expect(hasAuthenticatedSdoSession(page as never)).resolves.toBe(true)
 	})
@@ -129,7 +145,6 @@ describe('listBbbCourseModules', () => {
 	it.each([
 		'https://example.invalid/course/view.php?id=20',
 		'https://127.0.0.1/private',
-		'https://sdo.tusur.ru/login/index.php',
 	])('rejects an unsafe redirect before reading anchors: %s', async (redirectUrl) => {
 		const page = {
 			goto: vi.fn().mockResolvedValue(undefined),
@@ -143,6 +158,24 @@ describe('listBbbCourseModules', () => {
 				'https://sdo.tusur.ru/course/view.php?id=20',
 			),
 		).rejects.toThrow('SDO course navigation left the validated course page')
+		expect(page.locator).not.toHaveBeenCalled()
+	})
+
+	it('reports a course redirect to login as authentication required', async () => {
+		const page = {
+			goto: vi.fn().mockResolvedValue(undefined),
+			url: vi
+				.fn()
+				.mockReturnValue('https://sdo.tusur.ru/login/index.php'),
+			locator: vi.fn(),
+		}
+
+		await expect(
+			listBbbCourseModules(
+				page as never,
+				'https://sdo.tusur.ru/course/view.php?id=20',
+			),
+		).rejects.toThrow('SDO authentication required')
 		expect(page.locator).not.toHaveBeenCalled()
 	})
 
@@ -163,7 +196,11 @@ describe('listBbbCourseModules', () => {
 			url: vi
 				.fn()
 				.mockReturnValue('https://sdo.tusur.ru/course/view.php?id=20'),
-			locator: vi.fn().mockReturnValue({ evaluateAll }),
+			locator: vi.fn().mockImplementation((selector: string) =>
+				selector === 'a[href]'
+					? { evaluateAll }
+					: { count: vi.fn().mockResolvedValue(0) },
+			),
 		}
 
 		await expect(

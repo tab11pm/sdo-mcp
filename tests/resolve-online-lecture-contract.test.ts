@@ -21,6 +21,7 @@ const sdo = vi.hoisted(() => ({
 	findCourseModule: vi.fn(),
 	hasAuthenticatedSdoSession: vi.fn(),
 	listBbbCourseModules: vi.fn(),
+	listAuthenticatedCourses: vi.fn(),
 	listCourseModules: vi.fn(),
 	listCourses: vi.fn(),
 }))
@@ -72,7 +73,7 @@ describe('resolve_online_lecture MCP boundary', () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
 		sdo.hasAuthenticatedSdoSession.mockResolvedValue(true)
-		sdo.listCourses.mockResolvedValue([
+		sdo.listAuthenticatedCourses.mockResolvedValue([
 			{
 				title: 'Физика',
 				url: 'https://sdo.tusur.ru/course/view.php?id=20',

@@ -7,6 +7,10 @@ import {
 	isStableBbbActivityUrl,
 	type BbbModuleRef,
 } from './lecture-resolution.js'
+import {
+	SdoAuthenticationRequiredError,
+	SdoPageUnavailableError,
+} from './sdo-session-errors.js'
 
 const SDO_URL = process.env.SDO_URL ?? 'https://sdo.tusur.ru'
 const PROFILE_LOGIN_URL =
@@ -16,6 +20,91 @@ const PROFILE_LOGIN_URL =
 interface SdoAnchorRef {
 	name: string
 	href: string
+}
+
+const LOGIN_CONTROL_SELECTOR = [
+	'a[href*="/login/index.php"]:has-text("Log in")',
+	'a[href*="/login/index.php"]:has-text("Вход")',
+	'a:has-text("Вход через кабинет ТУСУРа")',
+	'button:has-text("Log in")',
+	'button:has-text("Вход через кабинет ТУСУРа")',
+	'input[value="Log in"]',
+	'input[value*="Вход через кабинет"]',
+].join(', ')
+
+const AUTHENTICATED_CONTROL_SELECTOR = [
+	'a[href*="/login/logout.php"]',
+	'.usermenu',
+	'#user-menu-toggle',
+	'[data-region="user-menu"]',
+].join(', ')
+
+function isAuthenticationDestination(value: string): boolean {
+	try {
+		const url = new URL(value)
+		return (
+			(url.protocol === 'https:' &&
+				url.hostname === 'sdo.tusur.ru' &&
+				url.port === '' &&
+				/^\/login(?:\/|$)/u.test(url.pathname)) ||
+			(url.protocol === 'https:' &&
+				url.hostname === 'profile.tusur.ru' &&
+				url.port === '' &&
+				/(?:login|sign_in)/u.test(url.pathname))
+		)
+	} catch {
+		return false
+	}
+}
+
+function assertSuccessfulResponse(
+	response: Awaited<ReturnType<Page['goto']>> | undefined,
+): void {
+	if (response !== null && response !== undefined && !response.ok()) {
+		throw new SdoPageUnavailableError()
+	}
+}
+
+async function readLoginControlCount(page: Page): Promise<number> {
+	const [loginFormCount, loginControlCount] = await Promise.all([
+		page
+			.locator(
+				'form[action*="/login"], form:has(input[type="password"]), #login',
+			)
+			.count(),
+		page.locator(LOGIN_CONTROL_SELECTOR).count(),
+	])
+
+	return loginFormCount + loginControlCount
+}
+
+async function isAuthenticatedSdoDocument(
+	page: Page,
+	response: Awaited<ReturnType<Page['goto']>> | undefined,
+): Promise<boolean> {
+	assertSuccessfulResponse(response)
+
+	let currentUrl: URL
+	try {
+		currentUrl = new URL(page.url())
+	} catch {
+		throw new SdoPageUnavailableError()
+	}
+
+	if (isAuthenticationDestination(currentUrl.href)) return false
+	if (
+		currentUrl.protocol !== 'https:' ||
+		currentUrl.hostname !== 'sdo.tusur.ru' ||
+		currentUrl.port !== '' ||
+		currentUrl.username !== '' ||
+		currentUrl.password !== ''
+	) {
+		throw new SdoPageUnavailableError()
+	}
+
+	if ((await readLoginControlCount(page)) > 0) return false
+
+	return (await page.locator(AUTHENTICATED_CONTROL_SELECTOR).count()) > 0
 }
 
 export function extractBbbModules(
@@ -41,43 +130,12 @@ export function extractBbbModules(
 export async function hasAuthenticatedSdoSession(
 	page: Page,
 ): Promise<boolean> {
-	await page.goto(`${SDO_URL}/`, {
+	const response = await page.goto(`${SDO_URL}/`, {
 		waitUntil: 'domcontentloaded',
 		timeout: 30000,
 	})
 
-	let currentUrl: URL
-	try {
-		currentUrl = new URL(page.url())
-	} catch {
-		return false
-	}
-
-	if (
-		currentUrl.protocol !== 'https:' ||
-		currentUrl.hostname !== 'sdo.tusur.ru' ||
-		currentUrl.port !== '' ||
-		currentUrl.username !== '' ||
-		currentUrl.password !== '' ||
-		/^\/login(?:\/|$)/u.test(currentUrl.pathname)
-	) {
-		return false
-	}
-
-	const [loginFormCount, loginButtonCount] = await Promise.all([
-		page
-			.locator(
-				'form[action*="/login"], form:has(input[type="password"]), #login',
-			)
-			.count(),
-		page
-			.locator(
-				'a:has-text("Вход через кабинет ТУСУРа"), button:has-text("Вход через кабинет ТУСУРа"), input[value*="Вход через кабинет"]',
-			)
-			.count(),
-	])
-
-	return loginFormCount === 0 && loginButtonCount === 0
+	return isAuthenticatedSdoDocument(page, response)
 }
 
 export async function listBbbCourseModules(
@@ -88,17 +146,24 @@ export async function listBbbCourseModules(
 		throw new Error('Invalid SDO course URL')
 	}
 
-	await page.goto(courseUrl, {
+	const response = await page.goto(courseUrl, {
 		waitUntil: 'domcontentloaded',
 		timeout: 30000,
 	})
+	assertSuccessfulResponse(response)
 
 	const finalUrl = page.url()
+	if (isAuthenticationDestination(finalUrl)) {
+		throw new SdoAuthenticationRequiredError()
+	}
 	if (
 		!isSdoCourseUrl(finalUrl) ||
 		new URL(finalUrl).href !== new URL(courseUrl).href
 	) {
 		throw new Error('SDO course navigation left the validated course page')
+	}
+	if ((await readLoginControlCount(page)) > 0) {
+		throw new SdoAuthenticationRequiredError()
 	}
 
 	const anchors = await page.locator('a[href]').evaluateAll((links) =>
@@ -436,12 +501,8 @@ export async function ensureLoggedIn(page: Page, context: BrowserContext) {
 	console.error('SDO login successful. Auth state saved.')
 }
 
-export async function listCourses(page: Page) {
-	await page.goto(`${SDO_URL}/`, {
-		waitUntil: 'networkidle',
-	})
-
-	const courses = await page.locator('a').evaluateAll((links) =>
+async function extractCourses(page: Page) {
+	return page.locator('a').evaluateAll((links) =>
 		links
 			.map((a) => ({
 				title: a.textContent?.trim() ?? '',
@@ -455,8 +516,26 @@ export async function listCourses(page: Page) {
 						x.url.includes('/course/')),
 			),
 	)
+}
 
-	return courses
+export async function listAuthenticatedCourses(page: Page) {
+	const response = await page.goto(`${SDO_URL}/`, {
+		waitUntil: 'networkidle',
+	})
+
+	if (!(await isAuthenticatedSdoDocument(page, response))) {
+		throw new SdoAuthenticationRequiredError()
+	}
+
+	return extractCourses(page)
+}
+
+export async function listCourses(page: Page) {
+	await page.goto(`${SDO_URL}/`, {
+		waitUntil: 'networkidle',
+	})
+
+	return extractCourses(page)
 }
 
 function safeFileName(name: string): string {
