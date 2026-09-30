@@ -25,11 +25,17 @@ interface SdoAnchorRef {
 const LOGIN_CONTROL_SELECTOR = [
 	'a[href*="/login/index.php"]:has-text("Log in")',
 	'a[href*="/login/index.php"]:has-text("Вход")',
+	'a[href*="/login/index.php"]:has-text("Войти")',
 	'a:has-text("Вход через кабинет ТУСУРа")',
 	'button:has-text("Log in")',
 	'button:has-text("Вход через кабинет ТУСУРа")',
 	'input[value="Log in"]',
 	'input[value*="Вход через кабинет"]',
+].join(', ')
+
+const GUEST_TEXT_SELECTOR = [
+	'body:has-text("You are not logged in")',
+	'body:has-text("Вы зашли гостем")',
 ].join(', ')
 
 const AUTHENTICATED_CONTROL_SELECTOR = [
@@ -65,17 +71,20 @@ function assertSuccessfulResponse(
 	}
 }
 
-async function readLoginControlCount(page: Page): Promise<number> {
-	const [loginFormCount, loginControlCount] = await Promise.all([
+async function readAuthenticationRequiredEvidenceCount(
+	page: Page,
+): Promise<number> {
+	const [loginFormCount, loginControlCount, guestTextCount] = await Promise.all([
 		page
 			.locator(
 				'form[action*="/login"], form:has(input[type="password"]), #login',
 			)
 			.count(),
 		page.locator(LOGIN_CONTROL_SELECTOR).count(),
+		page.locator(GUEST_TEXT_SELECTOR).count(),
 	])
 
-	return loginFormCount + loginControlCount
+	return loginFormCount + loginControlCount + guestTextCount
 }
 
 async function hasAuthenticatedControl(page: Page): Promise<boolean> {
@@ -112,9 +121,11 @@ async function isAuthenticatedSdoDocument(
 		throw new SdoPageUnavailableError()
 	}
 
-	if ((await readLoginControlCount(page)) > 0) return false
+	if ((await readAuthenticationRequiredEvidenceCount(page)) > 0) return false
 
-	return hasAuthenticatedControl(page)
+	if (await hasAuthenticatedControl(page)) return true
+
+	throw new SdoPageUnavailableError()
 }
 
 export function extractBbbModules(
@@ -172,11 +183,11 @@ export async function listBbbCourseModules(
 	) {
 		throw new Error('SDO course navigation left the validated course page')
 	}
-	if ((await readLoginControlCount(page)) > 0) {
+	if ((await readAuthenticationRequiredEvidenceCount(page)) > 0) {
 		throw new SdoAuthenticationRequiredError()
 	}
 	if (!(await hasAuthenticatedControl(page))) {
-		throw new SdoAuthenticationRequiredError()
+		throw new SdoPageUnavailableError()
 	}
 
 	const anchors = await page.locator('a[href]').evaluateAll((links) =>
