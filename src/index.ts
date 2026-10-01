@@ -10,6 +10,7 @@ import {
 	downloadSdoModuleFiles,
 	ensureLoggedIn,
 	findCourseModule,
+	hasAuthenticatedSdoSession,
 	listCourseModules,
 	listCourses,
 } from './sdo.js'
@@ -212,6 +213,32 @@ server.registerTool(
 				} catch {
 					throw new Error('SDO page unavailable')
 				}
+			}
+		}
+	},
+)
+
+server.registerTool(
+	'check_sdo_auth',
+	{
+		description: 'Проверить, действует ли локально сохранённая сессия SDO',
+	},
+	async () => {
+		let sdoPage: Awaited<ReturnType<typeof getSdoPage>> | undefined
+		try {
+			sdoPage = await getSdoPage()
+			const authenticated = sdoPage.authStatePresent
+				? await hasAuthenticatedSdoSession(sdoPage.page)
+				: false
+			return {
+				content: [{ type: 'text', text: JSON.stringify({ authenticated }) }],
+			}
+		} catch {
+			throw new Error('SDO page unavailable')
+		} finally {
+			if (sdoPage !== undefined) {
+				await sdoPage.context.close()
+				await sdoPage.browser.close()
 			}
 		}
 	},

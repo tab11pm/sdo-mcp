@@ -65,6 +65,14 @@ function resolutionRegistration(): Registration {
 	return registration
 }
 
+function authCheckRegistration(): Registration {
+	const registration = mcp.registrations.find(
+		({ args }) => args[0] === 'check_sdo_auth',
+	)
+	if (registration === undefined) throw new Error('check_sdo_auth was not registered')
+	return registration
+}
+
 describe('resolve_online_lecture MCP boundary', () => {
 	beforeAll(async () => {
 		await import('../src/index.js')
@@ -105,6 +113,25 @@ describe('resolve_online_lecture MCP boundary', () => {
 				({ args }) => args[0] === 'resolve_online_lecture',
 			),
 		).toHaveLength(1)
+		expect(
+			mcp.registrations.filter(({ args }) => args[0] === 'check_sdo_auth'),
+		).toHaveLength(1)
+	})
+
+	it('reports an unusable saved session without exposing session data', async () => {
+		const close = vi.fn().mockResolvedValue(undefined)
+		const closeBrowser = vi.fn().mockResolvedValue(undefined)
+		browser.getSdoPage.mockResolvedValue({
+			browser: { close: closeBrowser }, context: { close }, page: {}, authStatePresent: true,
+		})
+		sdo.hasAuthenticatedSdoSession.mockResolvedValue(false)
+		const [, , handler] = authCheckRegistration().args as [string, unknown, () => Promise<{ content: Array<{ type: 'text'; text: string }> }>]
+
+		await expect(handler()).resolves.toEqual({
+			content: [{ type: 'text', text: JSON.stringify({ authenticated: false }) }],
+		})
+		expect(close).toHaveBeenCalledOnce()
+		expect(closeBrowser).toHaveBeenCalledOnce()
 	})
 
 	it('uses a refined schema that requires exactly one course selector', () => {
