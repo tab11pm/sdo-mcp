@@ -15,7 +15,12 @@ import {
 const SDO_URL = process.env.SDO_URL ?? 'https://sdo.tusur.ru'
 const PROFILE_LOGIN_URL =
 	process.env.TUSUR_PROFILE_LOGIN_URL ??
-	'https://profile.tusur.ru/en/users/sign_in'
+	'https://profile.tusur.ru/users/sign_in'
+const SDO_LOGIN_URL = `${SDO_URL}/login/index.php`
+const TUSUR_CABINET_LOGIN_LINK_SELECTOR = [
+	'a:has-text("Вход через кабинет ТУСУРа")',
+	'a[href*="profile.tusur.ru"][href*="/users/sign_in"]',
+].join(', ')
 
 interface SdoAnchorRef {
 	name: string
@@ -280,26 +285,38 @@ async function isLoggedIntoSdo(page: Page): Promise<boolean> {
 	return false
 }
 
-async function loginToTusurProfile(page: Page) {
-	console.error('Opening TUSUR profile login page...')
+async function resolveTusurCabinetLoginUrl(
+	page: Page,
+): Promise<string | undefined> {
+	const cabinetLink = page.locator(TUSUR_CABINET_LOGIN_LINK_SELECTOR).first()
 
-	await page.goto(PROFILE_LOGIN_URL, {
-		waitUntil: 'domcontentloaded',
-		timeout: 30000,
-	})
+	if ((await cabinetLink.count()) === 0) return undefined
 
-	await page.screenshot({
-		path: 'debug-profile-opened.png',
-		fullPage: true,
-	})
+	const href = await cabinetLink
+		.evaluate((link) => (link as HTMLAnchorElement).href)
+		.catch(() => '')
 
+	return href || undefined
+}
+
+async function fillTusurProfileLoginForm(page: Page): Promise<void> {
 	const emailInput = page.locator(
-		'input[type="email"], input[name="user[email]"], input[name="email"], input[id*="email"], input[placeholder*="Email"]',
+		'input[name="user[email]"], input[type="email"], input[name="email"], input[id*="email"], input[placeholder*="Email"]',
 	)
 
 	const passwordInput = page.locator(
-		'input[type="password"], input[name="user[password]"], input[name="password"], input[id*="password"], input[placeholder*="Password"]',
+		'input[name="user[password]"], input[type="password"], input[name="password"], input[id*="password"], input[placeholder*="Password"]',
 	)
+
+	const hasLoginForm =
+		(await emailInput.count()) > 0 && (await passwordInput.count()) > 0
+
+	if (!hasLoginForm) {
+		console.error(
+			'TUSUR profile login form not found. Reusing the existing profile session.',
+		)
+		return
+	}
 
 	await emailInput.first().waitFor({
 		state: 'visible',
@@ -324,7 +341,7 @@ async function loginToTusurProfile(page: Page) {
 	console.error('Submitting TUSUR login form...')
 
 	const submitButton = page.locator(
-		'button[type="submit"], input[type="submit"], button:has-text("Sign in"), input[value="Sign in"]',
+		'form input[type="submit"], form button[type="submit"], form button:has-text("Войти"), form button:has-text("Sign in")',
 	)
 
 	await Promise.all([
@@ -334,30 +351,62 @@ async function loginToTusurProfile(page: Page) {
 		submitButton.first().click(),
 	])
 
-	await page.waitForTimeout(3000)
+	await page.waitForTimeout(4000)
 
 	await page.screenshot({
 		path: 'debug-profile-after-submit.png',
 		fullPage: true,
 	})
 
-	const currentUrl = page.url()
 	const bodyText = await page
 		.locator('body')
 		.innerText()
 		.catch(() => '')
 
-	console.error('After TUSUR login URL:', currentUrl)
-
 	if (
-		bodyText.includes('Invalid') ||
 		bodyText.includes('Невер') ||
+		bodyText.includes('Invalid') ||
 		bodyText.includes('Signed out successfully')
 	) {
 		throw new Error(
 			'TUSUR profile login failed. Check login/password or selector. Screenshot: debug-profile-after-submit.png',
 		)
 	}
+}
+
+async function loginToTusurProfile(page: Page) {
+	console.error('Opening SDO login page to start TUSUR profile login...')
+
+	await page.goto(SDO_LOGIN_URL, {
+		waitUntil: 'domcontentloaded',
+		timeout: 30000,
+	})
+
+	await page.waitForTimeout(1500)
+
+	if (await hasAuthenticatedControl(page)) {
+		console.error('SDO session already active after opening the login page.')
+		return
+	}
+
+	const cabinetLoginUrl = await resolveTusurCabinetLoginUrl(page)
+	const profileLoginUrl = cabinetLoginUrl ?? PROFILE_LOGIN_URL
+
+	console.error('Opening TUSUR profile login page:', profileLoginUrl)
+
+	await page.goto(profileLoginUrl, {
+		waitUntil: 'domcontentloaded',
+		timeout: 30000,
+	})
+
+	await page.waitForTimeout(2000)
+
+	await page.screenshot({
+		path: 'debug-profile-opened.png',
+		fullPage: true,
+	})
+
+	await fillTusurProfileLoginForm(page)
 }
 
 async function loginToSdoThroughTusur(page: Page) {
@@ -434,6 +483,8 @@ async function loginToSdoThroughTusur(page: Page) {
 			.waitForLoadState('domcontentloaded', { timeout: 30000 })
 			.catch(() => {})
 		await page.waitForTimeout(2000)
+
+		await fillTusurProfileLoginForm(page)
 
 		currentUrl = page.url()
 		bodyText = await page
