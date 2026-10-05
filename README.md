@@ -129,10 +129,18 @@ profile.tusur.ru / sdo.tusur.ru
 `lectureQuery` необязателен. Результат всегда имеет один из четырёх видов:
 
 ```ts
+type OnlineLectureCandidate = {
+	id: string
+	name: string
+	courseUrl: string
+	activityUrl: string
+	type: 'lecture' | 'practical'
+}
+
 type ResolveOnlineLectureResult =
-	| { status: 'resolved'; course: CourseRef; module: BbbModuleRef }
-	| { status: 'ambiguous'; candidates: LectureCandidate[] }
-	| { status: 'not_found'; candidates: [] }
+	| { status: 'resolved'; course: { id: string; name: string; url?: string }; module: OnlineLectureCandidate }
+	| { status: 'ambiguous'; candidates: OnlineLectureCandidate[] }
+	| { status: 'not_found' }
 	| { status: 'auth_required' }
 ```
 
@@ -140,6 +148,12 @@ type ResolveOnlineLectureResult =
 детерминированном порядке. Сервер никогда не выбирает первый вариант
 автоматически: выбор должен подтвердить пользователь или вызывающее приложение
 должно повторить запрос с более точным селектором.
+
+`id` — числовой идентификатор Moodle из `?id=`, `courseUrl` — URL курса,
+`type` — `lecture`, если активность похожа на лекцию (по умолчанию тоже
+`lecture`), иначе `practical`. Наружу возвращается только стабильный
+Moodle-URL активности; временная join-ссылка BBB и `sessionToken` не
+возвращаются и не логируются.
 
 ### list_courses
 

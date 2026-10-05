@@ -30,7 +30,7 @@
 - Create: `tests/fixtures/course-modules.html`
 
 **Interfaces:**
-- Produces `CourseRef`, `BbbModuleRef`, `LectureCandidate`, `ResolveOnlineLectureResult`.
+- Produces `CourseRef`, `BbbModuleRef`, `ResolvedCourse`, `OnlineLectureCandidate`, `ResolveOnlineLectureResult`.
 - Produces `normalizeSearchText(value: string): string`, `isSdoCourseUrl(value: string): boolean`, `isStableBbbActivityUrl(value: string): boolean`, and `chooseLectureCandidates(courses, modulesByCourse, lectureQuery?)`.
 
 - [ ] **Step 1: Write failing contract tests**
@@ -58,7 +58,7 @@ Add scripts:
 "test:watch": "vitest"
 ```
 
-Implement the functions so comparisons are Unicode lowercase, whitespace-collapsed substring matches; course/module candidates are sorted by normalized course title, normalized module title, then URL; and only validated BBB URLs survive.
+Implement the functions so comparisons are Unicode lowercase, whitespace-collapsed substring matches; candidates are sorted by canonical course URL, normalized module title, then activity URL; activity `id`/`courseUrl` are derived from the canonical URLs and `type` is classified from the module name (default `lecture`); and only validated BBB URLs survive.
 
 - [ ] **Step 4: Run unit suite**
 
@@ -129,7 +129,7 @@ git commit -m "feat: expose safe BBB module discovery"
 - Create: `tests/resolve-online-lecture-contract.test.ts`
 
 **Interfaces:**
-- Consumes `CourseRef`, `ResolveOnlineLectureResult`, `hasAuthenticatedSdoSession`, `listCourses`, `listBbbCourseModules`, and `chooseLectureCandidates`.
+- Consumes `CourseRef`, `OnlineLectureCandidate`, `ResolveOnlineLectureResult`, `hasAuthenticatedSdoSession`, `listCourses`, `listBbbCourseModules`, and `chooseLectureCandidates`.
 - Produces `resolveOnlineLecture(page, input): Promise<ResolveOnlineLectureResult>`.
 
 - [ ] **Step 1: Write failing service and MCP-schema tests**
@@ -218,4 +218,4 @@ git commit -m "docs: describe safe lecture resolution setup"
 
 - Coverage: Tasks 1–3 implement the contract and matching rules; Task 2 covers auth state and BBB extraction; Task 4 covers resource cleanup, docs, and ignored secret-bearing artifacts.
 - No-placeholder check: all tasks list exact files, interfaces, commands, expected outcomes, and commit boundaries.
-- Type consistency: `CourseRef`, `BbbModuleRef`, `LectureCandidate`, and `ResolveOnlineLectureResult` originate in Task 1 and are consumed unchanged by later tasks.
+- Type consistency: `CourseRef`, `BbbModuleRef`, `ResolvedCourse`, `OnlineLectureCandidate`, and `ResolveOnlineLectureResult` originate in Task 1 and are consumed unchanged by later tasks.

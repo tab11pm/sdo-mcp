@@ -55,6 +55,16 @@ describe('resolveOnlineLecture', () => {
 		expect(sdo.listBbbCourseModules).not.toHaveBeenCalled()
 	})
 
+	it('rejects a foreign course URL without reading SDO modules', async () => {
+		await expect(
+			resolveOnlineLecture(page as never, {
+				courseUrl: 'https://example.invalid/course/view.php?id=20',
+			}),
+		).rejects.toThrow('Invalid SDO course URL')
+		expect(sdo.listAuthenticatedCourses).not.toHaveBeenCalled()
+		expect(sdo.listBbbCourseModules).not.toHaveBeenCalled()
+	})
+
 	it('resolves one BBB activity selected by a direct course URL', async () => {
 		sdo.listBbbCourseModules.mockResolvedValue([
 		{
@@ -70,11 +80,18 @@ describe('resolveOnlineLecture', () => {
 			}),
 		).resolves.toEqual({
 			status: 'resolved',
-			course: { name: algebraCourse.url, url: algebraCourse.url },
+			course: {
+				id: '10',
+				name: algebraCourse.url,
+				url: algebraCourse.url,
+			},
 			module: {
+				id: '101',
 				name: 'Лекция 1',
+				courseUrl: algebraCourse.url,
 				activityUrl:
 					'https://sdo.tusur.ru/mod/bigbluebuttonbn/view.php?id=101',
+				type: 'lecture',
 			},
 		})
 	})
@@ -100,11 +117,18 @@ describe('resolveOnlineLecture', () => {
 			}),
 		).resolves.toEqual({
 			status: 'resolved',
-			course: { name: algebraCourse.url, url: algebraCourse.url },
+			course: {
+				id: '10',
+				name: algebraCourse.url,
+				url: algebraCourse.url,
+			},
 			module: {
+				id: '101',
 				name: 'Лекция 1',
+				courseUrl: algebraCourse.url,
 				activityUrl:
 					'https://sdo.tusur.ru/mod/bigbluebuttonbn/view.php?id=101',
+				type: 'lecture',
 			},
 		})
 		expect(sdo.listAuthenticatedCourses).not.toHaveBeenCalled()
@@ -127,11 +151,18 @@ describe('resolveOnlineLecture', () => {
 			}),
 		).resolves.toEqual({
 			status: 'resolved',
-			course: { name: physicsCourse.title, url: physicsCourse.url },
+			course: {
+				id: '20',
+				name: physicsCourse.title,
+				url: physicsCourse.url,
+			},
 			module: {
+				id: '202',
 				name: ' ЛЕКЦИЯ   ДВА ',
+				courseUrl: physicsCourse.url,
 				activityUrl:
 					'https://sdo.tusur.ru/mod/bigbluebuttonbn/view.php?id=202',
+				type: 'lecture',
 			},
 		})
 	})
@@ -139,7 +170,7 @@ describe('resolveOnlineLecture', () => {
 	it('returns not_found when no course matches the query', async () => {
 		await expect(
 			resolveOnlineLecture(page as never, { courseQuery: 'геометрия' }),
-		).resolves.toEqual({ status: 'not_found', candidates: [] })
+		).resolves.toEqual({ status: 'not_found' })
 		expect(sdo.listBbbCourseModules).not.toHaveBeenCalled()
 	})
 
@@ -163,20 +194,20 @@ describe('resolveOnlineLecture', () => {
 			status: 'ambiguous',
 			candidates: [
 				{
-					course: { name: 'Физика — ИРЭТ', url: algebraCourse.url },
-					module: {
-						name: 'Основная лекция',
-						activityUrl:
-							'https://sdo.tusur.ru/mod/bigbluebuttonbn/view.php?id=101',
-					},
+					id: '101',
+					name: 'Основная лекция',
+					courseUrl: algebraCourse.url,
+					activityUrl:
+						'https://sdo.tusur.ru/mod/bigbluebuttonbn/view.php?id=101',
+					type: 'lecture',
 				},
 				{
-					course: { name: 'Физика — ФСУ', url: physicsCourse.url },
-					module: {
-						name: 'Основная лекция',
-						activityUrl:
-							'https://sdo.tusur.ru/mod/bigbluebuttonbn/view.php?id=201',
-					},
+					id: '201',
+					name: 'Основная лекция',
+					courseUrl: physicsCourse.url,
+					activityUrl:
+						'https://sdo.tusur.ru/mod/bigbluebuttonbn/view.php?id=201',
+					type: 'lecture',
 				},
 			],
 		})
@@ -203,7 +234,7 @@ describe('resolveOnlineLecture', () => {
 
 		expect(result.status).toBe('ambiguous')
 		if (result.status === 'ambiguous') {
-			expect(result.candidates.map(({ module }) => module.name)).toEqual([
+			expect(result.candidates.map(({ name }) => name)).toEqual([
 				'Лекция 1',
 				'Лекция 2',
 			])

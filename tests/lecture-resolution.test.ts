@@ -117,8 +117,19 @@ describe('chooseLectureCandidates', () => {
 		expect(chooseLectureCandidates(courses, modulesByCourse, 'лекция 2')).toEqual(
 			{
 				status: 'resolved',
-				course: courses[1],
-				module: modulesByCourse[courses[1]!.url]![1],
+				course: {
+					id: '10',
+					name: 'Алгебра',
+					url: 'https://sdo.tusur.ru/course/view.php?id=10',
+				},
+				module: {
+					id: '102',
+					name: 'Лекция 2',
+					courseUrl: 'https://sdo.tusur.ru/course/view.php?id=10',
+					activityUrl:
+						'https://sdo.tusur.ru/mod/bigbluebuttonbn/view.php?id=102',
+					type: 'lecture',
+				},
 			},
 		)
 	})
@@ -126,7 +137,7 @@ describe('chooseLectureCandidates', () => {
 	it('returns not_found when no validated module matches', () => {
 		expect(
 			chooseLectureCandidates(courses, modulesByCourse, 'семинар'),
-		).toEqual({ status: 'not_found', candidates: [] })
+		).toEqual({ status: 'not_found' })
 	})
 
 	it('returns every match in deterministic course, module, then URL order', () => {
@@ -136,12 +147,20 @@ describe('chooseLectureCandidates', () => {
 			status: 'ambiguous',
 			candidates: [
 				{
-					course: courses[1],
-					module: modulesByCourse[courses[1]!.url]![0],
+					id: '101',
+					name: '   ЛЕКЦИЯ   1   — Матрицы ',
+					courseUrl: 'https://sdo.tusur.ru/course/view.php?id=10',
+					activityUrl:
+						'https://sdo.tusur.ru/mod/bigbluebuttonbn/view.php?id=101',
+					type: 'lecture',
 				},
 				{
-					course: courses[0],
-					module: modulesByCourse[courses[0]!.url]![0],
+					id: '201',
+					name: 'Лекция 1 — Введение',
+					courseUrl: 'https://sdo.tusur.ru/course/view.php?id=20',
+					activityUrl:
+						'https://sdo.tusur.ru/mod/bigbluebuttonbn/view.php?id=201',
+					type: 'lecture',
 				},
 			],
 		})
@@ -150,8 +169,71 @@ describe('chooseLectureCandidates', () => {
 	it('filters invalid activity URLs when no lecture query is supplied', () => {
 		expect(chooseLectureCandidates([courses[0]!], modulesByCourse)).toEqual({
 			status: 'resolved',
-			course: courses[0],
-			module: modulesByCourse[courses[0]!.url]![0],
+			course: {
+				id: '20',
+				name: ' Физика ',
+				url: 'https://sdo.tusur.ru/course/view.php?id=20',
+			},
+			module: {
+				id: '201',
+				name: 'Лекция 1 — Введение',
+				courseUrl: 'https://sdo.tusur.ru/course/view.php?id=20',
+				activityUrl:
+					'https://sdo.tusur.ru/mod/bigbluebuttonbn/view.php?id=201',
+				type: 'lecture',
+			},
+		})
+	})
+
+	it('classifies practical activities by name and defaults unclear ones to lecture', () => {
+		const practicalModules: ModulesByCourse = {
+			[courses[1]!.url]: [
+				{
+					name: 'Практическое занятие 1',
+					activityUrl:
+						'https://sdo.tusur.ru/mod/bigbluebuttonbn/view.php?id=301',
+				},
+				{
+					name: 'Семинар по матрицам',
+					activityUrl:
+						'https://sdo.tusur.ru/mod/bigbluebuttonbn/view.php?id=302',
+				},
+				{
+					name: 'Комната 3',
+					activityUrl:
+						'https://sdo.tusur.ru/mod/bigbluebuttonbn/view.php?id=303',
+				},
+			],
+		}
+
+		expect(chooseLectureCandidates([courses[1]!], practicalModules)).toEqual({
+			status: 'ambiguous',
+			candidates: [
+				{
+					id: '303',
+					name: 'Комната 3',
+					courseUrl: 'https://sdo.tusur.ru/course/view.php?id=10',
+					activityUrl:
+						'https://sdo.tusur.ru/mod/bigbluebuttonbn/view.php?id=303',
+					type: 'lecture',
+				},
+				{
+					id: '301',
+					name: 'Практическое занятие 1',
+					courseUrl: 'https://sdo.tusur.ru/course/view.php?id=10',
+					activityUrl:
+						'https://sdo.tusur.ru/mod/bigbluebuttonbn/view.php?id=301',
+					type: 'practical',
+				},
+				{
+					id: '302',
+					name: 'Семинар по матрицам',
+					courseUrl: 'https://sdo.tusur.ru/course/view.php?id=10',
+					activityUrl:
+						'https://sdo.tusur.ru/mod/bigbluebuttonbn/view.php?id=302',
+					type: 'practical',
+				},
+			],
 		})
 	})
 
@@ -177,7 +259,6 @@ describe('chooseLectureCandidates', () => {
 
 		expect(chooseLectureCandidates([unsafeCourse], modules)).toEqual({
 			status: 'not_found',
-			candidates: [],
 		})
 	})
 
@@ -210,13 +291,17 @@ describe('chooseLectureCandidates', () => {
 		).toEqual({
 			status: 'resolved',
 			course: {
+				id: '20',
 				name: 'Физика',
 				url: 'https://sdo.tusur.ru/course/view.php?id=20',
 			},
 			module: {
+				id: '17',
 				name: 'Safe lecture',
+				courseUrl: 'https://sdo.tusur.ru/course/view.php?id=20',
 				activityUrl:
 					'https://sdo.tusur.ru/mod/bigbluebuttonbn/view.php?id=17',
+				type: 'lecture',
 			},
 		})
 	})
@@ -241,8 +326,22 @@ describe('chooseLectureCandidates', () => {
 		expect(chooseLectureCandidates([course], sameNamedModules)).toEqual({
 			status: 'ambiguous',
 			candidates: [
-				{ course, module: sameNamedModules[course.url]![1] },
-				{ course, module: sameNamedModules[course.url]![0] },
+				{
+					id: '1',
+					name: ' лекция ',
+					courseUrl: 'https://sdo.tusur.ru/course/view.php?id=10',
+					activityUrl:
+						'https://sdo.tusur.ru/mod/bigbluebuttonbn/view.php?id=1',
+					type: 'lecture',
+				},
+				{
+					id: '2',
+					name: 'Лекция',
+					courseUrl: 'https://sdo.tusur.ru/course/view.php?id=10',
+					activityUrl:
+						'https://sdo.tusur.ru/mod/bigbluebuttonbn/view.php?id=2',
+					type: 'lecture',
+				},
 			],
 		})
 	})
@@ -275,13 +374,17 @@ describe('local HTML fixtures', () => {
 		).toEqual({
 			status: 'resolved',
 			course: {
+				id: '20',
 				name: 'Физика',
 				url: 'https://sdo.tusur.ru/course/view.php?id=20',
 			},
 			module: {
+				id: '17',
 				name: 'Лекция 1',
+				courseUrl: 'https://sdo.tusur.ru/course/view.php?id=20',
 				activityUrl:
 					'https://sdo.tusur.ru/mod/bigbluebuttonbn/view.php?id=17',
+				type: 'lecture',
 			},
 		})
 	})

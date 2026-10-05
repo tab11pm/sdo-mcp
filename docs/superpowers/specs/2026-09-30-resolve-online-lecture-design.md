@@ -27,14 +27,19 @@ resolve_online_lecture({
 }): ResolveOnlineLectureResult
 
 type ResolveOnlineLectureResult =
-  | { status: 'resolved'; course: CourseRef; module: BbbModuleRef }
-  | { status: 'ambiguous'; candidates: LectureCandidate[] }
-  | { status: 'not_found'; candidates: [] }
+  | { status: 'resolved'; course: ResolvedCourse; module: OnlineLectureCandidate }
+  | { status: 'ambiguous'; candidates: OnlineLectureCandidate[] }
+  | { status: 'not_found' }
   | { status: 'auth_required' };
 
-type CourseRef = { name: string; url: string };
-type BbbModuleRef = { name: string; activityUrl: string };
-type LectureCandidate = { course: CourseRef; module: BbbModuleRef };
+type ResolvedCourse = { id: string; name: string; url?: string };
+type OnlineLectureCandidate = {
+  id: string;
+  name: string;
+  courseUrl: string;
+  activityUrl: string;
+  type: 'lecture' | 'practical';
+};
 ```
 
 Exactly one of `courseUrl` and `courseQuery` is required. `lectureQuery` is
@@ -43,6 +48,10 @@ optional. Invalid combinations are rejected as MCP input validation errors.
 `activityUrl` must be an HTTPS URL on `sdo.tusur.ru` with path
 `/mod/bigbluebuttonbn/view.php` and an `id` query parameter. No response may
 contain a BBB host URL, a redirect URL, a `sessionToken`, cookies, or headers.
+`id` is the numeric Moodle id parsed from the URL, `courseUrl` is the canonical
+course URL, and `type` is `lecture` when the activity name looks like a lecture
+(the default for unclear names) or `practical` when it looks like a practical,
+seminar, or lab.
 
 ## Resolution algorithm
 
@@ -62,7 +71,7 @@ contain a BBB host URL, a redirect URL, a `sessionToken`, cookies, or headers.
    BBB activities.
 6. Return `not_found` when none remain; `resolved` when exactly one remains;
    otherwise return every retained candidate as `ambiguous`, in deterministic
-   order by normalized course name, module name, then URL.
+   order by canonical course URL, normalized module name, then activity URL.
 
 Neither the MCP server nor its client chooses the first candidate.
 

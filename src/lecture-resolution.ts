@@ -8,15 +8,24 @@ export interface BbbModuleRef {
 	activityUrl: string
 }
 
-export interface LectureCandidate {
-	course: CourseRef
-	module: BbbModuleRef
+export interface ResolvedCourse {
+	id: string
+	name: string
+	url?: string
+}
+
+export interface OnlineLectureCandidate {
+	id: string
+	name: string
+	courseUrl: string
+	activityUrl: string
+	type: 'lecture' | 'practical'
 }
 
 export type ResolveOnlineLectureResult =
-	| { status: 'resolved'; course: CourseRef; module: BbbModuleRef }
-	| { status: 'ambiguous'; candidates: LectureCandidate[] }
-	| { status: 'not_found'; candidates: [] }
+	| { status: 'resolved'; course: ResolvedCourse; module: OnlineLectureCandidate }
+	| { status: 'ambiguous'; candidates: OnlineLectureCandidate[] }
+	| { status: 'not_found' }
 	| { status: 'auth_required' }
 
 export type ModulesByCourse = Readonly<
@@ -28,6 +37,24 @@ export function normalizeSearchText(value: string): string {
 }
 
 const SDO_ORIGIN = 'https://sdo.tusur.ru'
+
+const LECTURE_TYPE_HINTS = [
+	'лекц',
+	'lecture',
+	'онлайн',
+	'online',
+	'вебинар',
+	'webinar',
+]
+
+const PRACTICAL_TYPE_HINTS = [
+	'практи',
+	'practic',
+	'семинар',
+	'seminar',
+	'лаборатор',
+	'lab',
+]
 
 function canonicalizeSdoUrl(
 	value: string,
@@ -60,6 +87,10 @@ function canonicalizeSdoUrl(
 	}
 }
 
+function idFromCanonicalSdoUrl(value: string): string {
+	return new URL(value).searchParams.get('id') ?? ''
+}
+
 export function isSdoCourseUrl(value: string): boolean {
 	return canonicalizeSdoUrl(value, '/course/view.php') !== undefined
 }
@@ -71,6 +102,21 @@ export function isStableBbbActivityUrl(value: string): boolean {
 	)
 }
 
+export function classifyOnlineLectureType(
+	name: string,
+): 'lecture' | 'practical' {
+	const normalized = normalizeSearchText(name)
+
+	if (LECTURE_TYPE_HINTS.some((hint) => normalized.includes(hint))) {
+		return 'lecture'
+	}
+	if (PRACTICAL_TYPE_HINTS.some((hint) => normalized.includes(hint))) {
+		return 'practical'
+	}
+
+	return 'lecture'
+}
+
 function compareText(left: string, right: string): number {
 	if (left < right) return -1
 	if (left > right) return 1
@@ -78,19 +124,16 @@ function compareText(left: string, right: string): number {
 }
 
 function compareCandidates(
-	left: LectureCandidate,
-	right: LectureCandidate,
+	left: OnlineLectureCandidate,
+	right: OnlineLectureCandidate,
 ): number {
 	return (
+		compareText(left.courseUrl, right.courseUrl) ||
 		compareText(
-			normalizeSearchText(left.course.name),
-			normalizeSearchText(right.course.name),
+			normalizeSearchText(left.name),
+			normalizeSearchText(right.name),
 		) ||
-		compareText(
-			normalizeSearchText(left.module.name),
-			normalizeSearchText(right.module.name),
-		) ||
-		compareText(left.module.activityUrl, right.module.activityUrl)
+		compareText(left.activityUrl, right.activityUrl)
 	)
 }
 
@@ -103,7 +146,8 @@ export function chooseLectureCandidates(
 		lectureQuery === undefined
 			? undefined
 			: normalizeSearchText(lectureQuery)
-	const candidates: LectureCandidate[] = []
+	let resolvedCourse: ResolvedCourse | undefined
+	const candidates: OnlineLectureCandidate[] = []
 
 	for (const course of courses) {
 		const canonicalCourseUrl = canonicalizeSdoUrl(
@@ -112,10 +156,7 @@ export function chooseLectureCandidates(
 		)
 		if (canonicalCourseUrl === undefined) continue
 
-		const canonicalCourse: CourseRef = {
-			name: course.name,
-			url: canonicalCourseUrl,
-		}
+		const courseCandidates: OnlineLectureCandidate[] = []
 
 		for (const module of modulesByCourse[course.url] ?? []) {
 			const canonicalActivityUrl = canonicalizeSdoUrl(
@@ -130,28 +171,37 @@ export function chooseLectureCandidates(
 				continue
 			}
 
-			candidates.push({
-				course: canonicalCourse,
-				module: {
-					name: module.name,
-					activityUrl: canonicalActivityUrl,
-				},
+			courseCandidates.push({
+				id: idFromCanonicalSdoUrl(canonicalActivityUrl),
+				name: module.name,
+				courseUrl: canonicalCourseUrl,
+				activityUrl: canonicalActivityUrl,
+				type: classifyOnlineLectureType(module.name),
 			})
 		}
+
+		if (courseCandidates.length > 0 && resolvedCourse === undefined) {
+			resolvedCourse = {
+				id: idFromCanonicalSdoUrl(canonicalCourseUrl),
+				name: course.name,
+				url: canonicalCourseUrl,
+			}
+		}
+
+		candidates.push(...courseCandidates)
 	}
 
 	candidates.sort(compareCandidates)
 
 	if (candidates.length === 0) {
-		return { status: 'not_found', candidates: [] }
+		return { status: 'not_found' }
 	}
 
 	if (candidates.length === 1) {
-		const candidate = candidates[0]!
 		return {
 			status: 'resolved',
-			course: candidate.course,
-			module: candidate.module,
+			course: resolvedCourse!,
+			module: candidates[0]!,
 		}
 	}
 

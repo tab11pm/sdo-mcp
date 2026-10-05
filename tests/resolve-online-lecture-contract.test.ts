@@ -174,13 +174,17 @@ describe('resolve_online_lecture MCP boundary', () => {
 		const expected = {
 			status: 'resolved',
 			course: {
+				id: '20',
 				name: 'Физика',
 				url: 'https://sdo.tusur.ru/course/view.php?id=20',
 			},
 			module: {
+				id: '201',
 				name: 'Лекция 1',
+				courseUrl: 'https://sdo.tusur.ru/course/view.php?id=20',
 				activityUrl:
 					'https://sdo.tusur.ru/mod/bigbluebuttonbn/view.php?id=201',
+				type: 'lecture',
 			},
 		}
 
