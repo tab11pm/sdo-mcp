@@ -244,5 +244,24 @@ server.registerTool(
 	},
 )
 
+server.tool(
+	'sdo_login',
+	'Войти в SDO через кабинет ТУСУРа и сохранить сессию в SDO_AUTH_STATE_PATH',
+	{},
+	async () => {
+		const { context, page } = await getSdoPage()
+
+		try {
+			await ensureLoggedIn(page, context)
+
+			return {
+				content: [{ type: 'text', text: JSON.stringify({ status: 'logged_in' }) }],
+			}
+		} finally {
+			await context.close()
+		}
+	},
+)
+
 const transport = new StdioServerTransport()
 await server.connect(transport)

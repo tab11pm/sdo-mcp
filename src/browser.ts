@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises'
+import path from 'node:path'
 import {
 	chromium,
 	type Browser,
@@ -127,6 +128,7 @@ export async function getSdoPage(): Promise<{
 }
 
 export async function saveAuthState(context: BrowserContext) {
-	await fs.mkdir('storage', { recursive: true })
-	await context.storageState({ path: AUTH_PATH })
+	const authStatePath = resolveAuthStatePath(process.env)
+	await fs.mkdir(path.dirname(authStatePath), { recursive: true })
+	await context.storageState({ path: authStatePath })
 }

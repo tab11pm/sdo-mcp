@@ -96,7 +96,7 @@ describe('resolve_online_lecture MCP boundary', () => {
 		])
 	})
 
-	it('keeps the five existing tools and registers the new tool once', () => {
+	it('keeps the existing tools, adds sdo_login, and registers the new tool once', () => {
 		expect(
 			mcp.registrations
 				.filter(({ kind }) => kind === 'tool')
@@ -107,6 +107,7 @@ describe('resolve_online_lecture MCP boundary', () => {
 			'download_module_files',
 			'list_course_modules',
 			'find_course_module',
+			'sdo_login',
 		])
 		expect(
 			mcp.registrations.filter(

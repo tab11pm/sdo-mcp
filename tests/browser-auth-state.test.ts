@@ -14,7 +14,11 @@ vi.mock('playwright', () => ({
 	},
 }))
 
-import { getSdoPage, resolveAuthStatePath } from '../src/browser.js'
+import {
+	getSdoPage,
+	resolveAuthStatePath,
+	saveAuthState,
+} from '../src/browser.js'
 
 describe('resolveAuthStatePath', () => {
 	it('honors SDO_AUTH_STATE_PATH', () => {
@@ -25,6 +29,29 @@ describe('resolveAuthStatePath', () => {
 
 	it('uses the development state path when the variable is absent', () => {
 		expect(resolveAuthStatePath({})).toBe('storage/auth.json')
+	})
+})
+
+describe('saveAuthState', () => {
+	let temporaryDirectory: string | undefined
+
+	afterEach(async () => {
+		vi.unstubAllEnvs()
+		if (temporaryDirectory !== undefined) {
+			await rm(temporaryDirectory, { recursive: true, force: true })
+			temporaryDirectory = undefined
+		}
+	})
+
+	it('writes the session to SDO_AUTH_STATE_PATH, creating its directory', async () => {
+		temporaryDirectory = await mkdtemp(path.join(tmpdir(), 'sdo-auth-state-'))
+		const authStatePath = path.join(temporaryDirectory, 'nested', 'state.json')
+		vi.stubEnv('SDO_AUTH_STATE_PATH', authStatePath)
+		const storageState = vi.fn().mockResolvedValue(undefined)
+
+		await saveAuthState({ storageState } as never)
+
+		expect(storageState).toHaveBeenCalledWith({ path: authStatePath })
 	})
 })
 
