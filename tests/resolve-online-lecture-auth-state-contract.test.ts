@@ -38,14 +38,10 @@ vi.mock('@modelcontextprotocol/sdk/server/stdio.js', () => ({
 }))
 
 vi.mock('../src/sdo.js', () => ({
-	downloadSdoModuleFiles: vi.fn(),
 	ensureLoggedIn: vi.fn(),
-	findCourseModule: vi.fn(),
 	hasAuthenticatedSdoSession: vi.fn(),
 	listAuthenticatedCourses: vi.fn(),
 	listBbbCourseModules: vi.fn(),
-	listCourseModules: vi.fn(),
-	listCourses: vi.fn(),
 }))
 
 function resolveHandler(): ResolveHandler {

@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const sdo = vi.hoisted(() => ({
 	hasAuthenticatedSdoSession: vi.fn(),
 	listAuthenticatedCourses: vi.fn(),
-	listCourses: vi.fn(),
 	listBbbCourseModules: vi.fn(),
 }))
 
@@ -51,7 +50,6 @@ describe('resolveOnlineLecture', () => {
 		await expect(
 			resolveOnlineLecture(page as never, { courseQuery: 'physics' }),
 		).resolves.toEqual({ status: 'auth_required' })
-		expect(sdo.listCourses).not.toHaveBeenCalled()
 		expect(sdo.listBbbCourseModules).not.toHaveBeenCalled()
 	})
 
@@ -100,9 +98,6 @@ describe('resolveOnlineLecture', () => {
 		sdo.listAuthenticatedCourses.mockRejectedValue(
 			new Error('authenticated course list unavailable'),
 		)
-		sdo.listCourses.mockRejectedValue(
-			new Error('landing-page course list unavailable'),
-		)
 		sdo.listBbbCourseModules.mockResolvedValue([
 			{
 				name: 'Лекция 1',
@@ -132,7 +127,6 @@ describe('resolveOnlineLecture', () => {
 			},
 		})
 		expect(sdo.listAuthenticatedCourses).not.toHaveBeenCalled()
-		expect(sdo.listCourses).not.toHaveBeenCalled()
 	})
 
 	it('normalizes a course query and lecture query before matching', async () => {

@@ -20,14 +20,10 @@ const browser = vi.hoisted(() => ({
 }))
 
 const sdo = vi.hoisted(() => ({
-	downloadSdoModuleFiles: vi.fn(),
 	ensureLoggedIn: vi.fn(),
-	findCourseModule: vi.fn(),
 	hasAuthenticatedSdoSession: vi.fn(),
 	listAuthenticatedCourses: vi.fn(),
 	listBbbCourseModules: vi.fn(),
-	listCourseModules: vi.fn(),
-	listCourses: vi.fn(),
 }))
 
 vi.mock('@modelcontextprotocol/sdk/server/mcp.js', () => ({

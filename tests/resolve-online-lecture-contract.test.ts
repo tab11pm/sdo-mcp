@@ -16,14 +16,10 @@ const browser = vi.hoisted(() => ({
 }))
 
 const sdo = vi.hoisted(() => ({
-	downloadSdoModuleFiles: vi.fn(),
 	ensureLoggedIn: vi.fn(),
-	findCourseModule: vi.fn(),
 	hasAuthenticatedSdoSession: vi.fn(),
 	listBbbCourseModules: vi.fn(),
 	listAuthenticatedCourses: vi.fn(),
-	listCourseModules: vi.fn(),
-	listCourses: vi.fn(),
 }))
 
 vi.mock('@modelcontextprotocol/sdk/server/mcp.js', () => ({
@@ -96,17 +92,10 @@ describe('resolve_online_lecture MCP boundary', () => {
 		])
 	})
 
-	it('keeps the existing tools, adds sdo_login, and registers the new tool once', () => {
-		expect(
-			mcp.registrations
-				.filter(({ kind }) => kind === 'tool')
-				.map(({ args }) => args[0]),
-		).toEqual([
-			'list_courses',
-			'get_assignment_details',
-			'download_module_files',
-			'list_course_modules',
-			'find_course_module',
+	it('registers exactly the three Online Lecture tools', () => {
+		expect(mcp.registrations.map(({ args }) => args[0]).sort()).toEqual([
+			'check_sdo_auth',
+			'resolve_online_lecture',
 			'sdo_login',
 		])
 		expect(
@@ -220,7 +209,6 @@ describe('resolve_online_lecture MCP boundary', () => {
 			],
 		})
 		expect(sdo.hasAuthenticatedSdoSession).not.toHaveBeenCalled()
-		expect(sdo.listCourses).not.toHaveBeenCalled()
 		expect(close).toHaveBeenCalledOnce()
 		expect(closeBrowser).toHaveBeenCalledOnce()
 	})
