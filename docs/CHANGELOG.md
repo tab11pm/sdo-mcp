@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased — breaking change для Online Lecture
+
+- В MCP-сервере остались только `sdo_login`, `check_sdo_auth` и `resolve_online_lecture`.
+- Удалены инструменты `list_courses`, `get_assignment_details`, `download_module_files`, `list_course_modules` и `find_course_module`. Клиенты этих инструментов должны обновить интеграцию.
+- Удалены функции и отладочные скрипты, обслуживавшие просмотр и скачивание материалов курса, а также зависимости `express` и `@types/express`.
+- Отладочные снимки страниц входа создаются только при `SDO_DEBUG_SCREENSHOTS=1`. Без флага сообщения об ошибках не содержат ссылок на снимки.
+- Поддерживаемые переменные окружения: `SDO_USERNAME` и `SDO_PASSWORD` для входа, `SDO_AUTH_STATE_PATH` для хранения сессии (по умолчанию `storage/auth.json`), `HEADLESS=true` для браузера без окна, `SDO_DEBUG_SCREENSHOTS=1` для отладочных снимков.
+
 ## 0.2.0
 
 ### Добавлено
