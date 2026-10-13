@@ -1,5 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { z } from 'zod'
+import { BrowserLaunchError } from '../src/browser-launch-error.js'
 
 interface Registration {
 	kind: 'tool' | 'registerTool'
@@ -251,6 +252,28 @@ describe('resolve_online_lecture MCP boundary', () => {
 
 		await expect(handler({ courseQuery: 'физика' })).rejects.toThrow(
 			/^SDO page unavailable$/u,
+		)
+	})
+
+	it('shows a safe browser launch hint from resolve_online_lecture', async () => {
+		browser.getSdoPage.mockRejectedValue(
+			new BrowserLaunchError('Браузер msedge не найден. Установите Microsoft Edge.'),
+		)
+		const [, , handler] = resolutionRegistration().args as [string, unknown, ResolveHandler]
+
+		await expect(handler({ courseQuery: 'физика' })).rejects.toThrow(
+			/Браузер msedge не найден/u,
+		)
+	})
+
+	it('shows a safe browser launch hint from check_sdo_auth', async () => {
+		browser.getSdoPage.mockRejectedValue(
+			new BrowserLaunchError('Установите Chromium: npx playwright install chromium'),
+		)
+		const [, , handler] = authCheckRegistration().args as [string, unknown, () => Promise<unknown>]
+
+		await expect(handler()).rejects.toThrow(
+			/Установите Chromium: npx playwright install chromium/u,
 		)
 	})
 })

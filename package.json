@@ -1,11 +1,21 @@
 {
 	"name": "sdo_mcp",
 	"version": "1.1.0",
-	"description": "",
-	"main": "srd/index.js",
+	"description": "Первая версия кастомного MCP-сервера для работы с SDO ТУСУР.",
+	"main": "dist/index.js",
+	"bin": {
+		"sdo-mcp": "dist/index.js"
+	},
+	"files": [
+		"dist"
+	],
+	"engines": {
+		"node": ">=20"
+	},
 	"scripts": {
 		"dev": "tsx src/index.ts",
 		"build": "tsc",
+		"prepare": "tsc",
 		"start": "node dist/index.js",
 		"test": "vitest run",
 		"test:watch": "vitest"
@@ -25,5 +35,10 @@
 		"tsx": "^4.22.3",
 		"typescript": "^6.0.3",
 		"vitest": "^5.0.2"
-	}
+	},
+	"directories": {
+		"doc": "docs",
+		"test": "tests"
+	},
+	"types": "./dist/index.d.ts"
 }
