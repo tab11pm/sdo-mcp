@@ -15,10 +15,27 @@ vi.mock('playwright', () => ({
 }))
 
 import {
+	buildLaunchOptions,
 	getSdoPage,
 	resolveAuthStatePath,
 	saveAuthState,
 } from '../src/browser.js'
+
+describe('buildLaunchOptions', () => {
+	it.each([
+		['unset', {}, { headless: false }],
+		['msedge', { SDO_BROWSER_CHANNEL: 'msedge' }, { headless: false, channel: 'msedge' }],
+		['empty', { SDO_BROWSER_CHANNEL: '' }, { headless: false }],
+		['whitespace', { SDO_BROWSER_CHANNEL: '   ' }, { headless: false }],
+		['trimmed', { SDO_BROWSER_CHANNEL: '  msedge  ' }, { headless: false, channel: 'msedge' }],
+	] as const)('selects the browser channel for %s', (_label, env, expected) => {
+		expect(buildLaunchOptions(env)).toEqual(expected)
+	})
+
+	it('preserves the headless setting', () => {
+		expect(buildLaunchOptions({ HEADLESS: 'true' })).toEqual({ headless: true })
+	})
+})
 
 describe('resolveAuthStatePath', () => {
 	it('honors SDO_AUTH_STATE_PATH', () => {
@@ -164,5 +181,22 @@ describe('getSdoPage', () => {
 		await expect(getSdoPage()).rejects.toThrow('page unavailable')
 		expect(context.close).toHaveBeenCalledOnce()
 		expect(browser.close).toHaveBeenCalledOnce()
+	})
+
+	it('reports a configured browser channel without exposing Playwright paths', async () => {
+		vi.stubEnv('SDO_BROWSER_CHANNEL', 'msedge')
+		playwright.launch.mockRejectedValueOnce(new Error('missing /private/profile?token=secret'))
+
+		const launch = getSdoPage()
+		await expect(launch).rejects.toThrow(/Браузер msedge не найден/u)
+		await expect(launch).rejects.not.toThrow(/private|secret/u)
+		expect(playwright.launch).toHaveBeenCalledWith({ headless: true, channel: 'msedge' })
+	})
+
+	it('suggests installing Chromium without exposing Playwright paths', async () => {
+		vi.stubEnv('SDO_BROWSER_CHANNEL', '')
+		playwright.launch.mockRejectedValueOnce(new Error('missing /private/profile?token=secret'))
+
+		await expect(getSdoPage()).rejects.toThrow(/Установите Chromium: npx playwright install chromium/u)
 	})
 })

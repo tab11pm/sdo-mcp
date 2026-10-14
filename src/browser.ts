@@ -6,11 +6,28 @@ import {
 	type BrowserContext,
 	type Page,
 } from 'playwright'
+import { BrowserLaunchError } from './browser-launch-error.js'
 
 const AUTH_PATH = 'storage/auth.json'
 
 interface AuthStateEnvironment {
 	SDO_AUTH_STATE_PATH?: string
+}
+
+interface BrowserLaunchEnvironment {
+	HEADLESS?: string
+	SDO_BROWSER_CHANNEL?: string
+}
+
+export function buildLaunchOptions(env: BrowserLaunchEnvironment): {
+	headless: boolean
+	channel?: string
+} {
+	const channel = env.SDO_BROWSER_CHANNEL?.trim()
+	return {
+		headless: env.HEADLESS === 'true',
+		...(channel ? { channel } : {}),
+	}
 }
 
 interface JsonObject {
@@ -89,9 +106,17 @@ export async function getSdoPage(): Promise<{
 	page: Page
 	authStatePresent: boolean
 }> {
-	const browser = await chromium.launch({
-		headless: process.env.HEADLESS === 'true',
-	})
+	const launchOptions = buildLaunchOptions(process.env)
+	let browser: Browser
+	try {
+		browser = await chromium.launch(launchOptions)
+	} catch {
+		throw new BrowserLaunchError(
+			launchOptions.channel
+				? `Браузер ${launchOptions.channel} не найден или не запускается. Установите его или задайте другой SDO_BROWSER_CHANNEL.`
+				: 'Chromium Playwright не найден или не запускается. Установите Chromium: npx playwright install chromium',
+		)
+	}
 	let context: BrowserContext | undefined
 	try {
 		const authStatePath = resolveAuthStatePath(process.env)

@@ -1,5 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { z } from 'zod'
+import { BrowserLaunchError } from '../src/browser-launch-error.js'
 
 interface Registration {
 	kind: 'tool' | 'registerTool'
@@ -16,14 +17,10 @@ const browser = vi.hoisted(() => ({
 }))
 
 const sdo = vi.hoisted(() => ({
-	downloadSdoModuleFiles: vi.fn(),
 	ensureLoggedIn: vi.fn(),
-	findCourseModule: vi.fn(),
 	hasAuthenticatedSdoSession: vi.fn(),
 	listBbbCourseModules: vi.fn(),
 	listAuthenticatedCourses: vi.fn(),
-	listCourseModules: vi.fn(),
-	listCourses: vi.fn(),
 }))
 
 vi.mock('@modelcontextprotocol/sdk/server/mcp.js', () => ({
@@ -96,17 +93,10 @@ describe('resolve_online_lecture MCP boundary', () => {
 		])
 	})
 
-	it('keeps the existing tools, adds sdo_login, and registers the new tool once', () => {
-		expect(
-			mcp.registrations
-				.filter(({ kind }) => kind === 'tool')
-				.map(({ args }) => args[0]),
-		).toEqual([
-			'list_courses',
-			'get_assignment_details',
-			'download_module_files',
-			'list_course_modules',
-			'find_course_module',
+	it('registers exactly the three Online Lecture tools', () => {
+		expect(mcp.registrations.map(({ args }) => args[0]).sort()).toEqual([
+			'check_sdo_auth',
+			'resolve_online_lecture',
 			'sdo_login',
 		])
 		expect(
@@ -220,7 +210,6 @@ describe('resolve_online_lecture MCP boundary', () => {
 			],
 		})
 		expect(sdo.hasAuthenticatedSdoSession).not.toHaveBeenCalled()
-		expect(sdo.listCourses).not.toHaveBeenCalled()
 		expect(close).toHaveBeenCalledOnce()
 		expect(closeBrowser).toHaveBeenCalledOnce()
 	})
@@ -263,6 +252,28 @@ describe('resolve_online_lecture MCP boundary', () => {
 
 		await expect(handler({ courseQuery: 'физика' })).rejects.toThrow(
 			/^SDO page unavailable$/u,
+		)
+	})
+
+	it('shows a safe browser launch hint from resolve_online_lecture', async () => {
+		browser.getSdoPage.mockRejectedValue(
+			new BrowserLaunchError('Браузер msedge не найден. Установите Microsoft Edge.'),
+		)
+		const [, , handler] = resolutionRegistration().args as [string, unknown, ResolveHandler]
+
+		await expect(handler({ courseQuery: 'физика' })).rejects.toThrow(
+			/Браузер msedge не найден/u,
+		)
+	})
+
+	it('shows a safe browser launch hint from check_sdo_auth', async () => {
+		browser.getSdoPage.mockRejectedValue(
+			new BrowserLaunchError('Установите Chromium: npx playwright install chromium'),
+		)
+		const [, , handler] = authCheckRegistration().args as [string, unknown, () => Promise<unknown>]
+
+		await expect(handler()).rejects.toThrow(
+			/Установите Chromium: npx playwright install chromium/u,
 		)
 	})
 })
