@@ -153,8 +153,11 @@ server.registerTool(
 			throw new Error('SDO page unavailable')
 		} finally {
 			if (sdoPage !== undefined) {
-				await sdoPage.context.close()
-				await sdoPage.browser.close()
+				try {
+					await sdoPage.context.close()
+				} finally {
+					await sdoPage.browser.close()
+				}
 			}
 		}
 	},
@@ -165,7 +168,7 @@ server.tool(
 	'Войти в SDO через кабинет ТУСУРа и сохранить сессию в SDO_AUTH_STATE_PATH',
 	{},
 	async () => {
-		const { context, page } = await getSdoPage()
+		const { browser, context, page } = await getSdoPage()
 
 		try {
 			await ensureLoggedIn(page, context)
@@ -174,7 +177,11 @@ server.tool(
 				content: [{ type: 'text', text: JSON.stringify({ status: 'logged_in' }) }],
 			}
 		} finally {
-			await context.close()
+			try {
+				await context.close()
+			} finally {
+				await browser.close()
+			}
 		}
 	},
 )

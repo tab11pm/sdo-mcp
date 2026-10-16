@@ -70,6 +70,14 @@ function authCheckRegistration(): Registration {
 	return registration
 }
 
+function loginRegistration(): Registration {
+	const registration = mcp.registrations.find(
+		({ args }) => args[0] === 'sdo_login',
+	)
+	if (registration === undefined) throw new Error('sdo_login was not registered')
+	return registration
+}
+
 describe('resolve_online_lecture MCP boundary', () => {
 	beforeAll(async () => {
 		await import('../src/index.js')
@@ -141,6 +149,48 @@ describe('resolve_online_lecture MCP boundary', () => {
 			content: [{ type: 'text', text: JSON.stringify({ authenticated: false }) }],
 		})
 		expect(close).toHaveBeenCalledOnce()
+		expect(closeBrowser).toHaveBeenCalledOnce()
+	})
+
+	it('closes the browser after a successful login', async () => {
+		const close = vi.fn().mockResolvedValue(undefined)
+		const closeBrowser = vi.fn().mockResolvedValue(undefined)
+		const context = { close }
+		const page = { kind: 'login-page' }
+		browser.getSdoPage.mockResolvedValue({
+			browser: { close: closeBrowser }, context, page, authStatePresent: false,
+		})
+		const handler = loginRegistration().args[3] as () => Promise<unknown>
+
+		await expect(handler()).resolves.toEqual({
+			content: [{ type: 'text', text: JSON.stringify({ status: 'logged_in' }) }],
+		})
+		expect(sdo.ensureLoggedIn).toHaveBeenCalledWith(page, context)
+		expect(close).toHaveBeenCalledOnce()
+		expect(closeBrowser).toHaveBeenCalledOnce()
+	})
+
+	it('closes the browser if closing the login context fails', async () => {
+		const close = vi.fn().mockRejectedValue(new Error('context close failed'))
+		const closeBrowser = vi.fn().mockResolvedValue(undefined)
+		browser.getSdoPage.mockResolvedValue({
+			browser: { close: closeBrowser }, context: { close }, page: {}, authStatePresent: false,
+		})
+		const handler = loginRegistration().args[3] as () => Promise<unknown>
+
+		await expect(handler()).rejects.toThrow('context close failed')
+		expect(closeBrowser).toHaveBeenCalledOnce()
+	})
+
+	it('closes the browser if closing the auth check context fails', async () => {
+		const close = vi.fn().mockRejectedValue(new Error('context close failed'))
+		const closeBrowser = vi.fn().mockResolvedValue(undefined)
+		browser.getSdoPage.mockResolvedValue({
+			browser: { close: closeBrowser }, context: { close }, page: {}, authStatePresent: false,
+		})
+		const handler = authCheckRegistration().args[2] as () => Promise<unknown>
+
+		await expect(handler()).rejects.toThrow('context close failed')
 		expect(closeBrowser).toHaveBeenCalledOnce()
 	})
 
