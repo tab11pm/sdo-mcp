@@ -92,9 +92,14 @@ describe('resolve_online_lecture MCP boundary', () => {
 		])
 	})
 
-	it('registers exactly the three Online Lecture tools', () => {
+	it('registers the Online Lecture and restored course tools', () => {
 		expect(mcp.registrations.map(({ args }) => args[0]).sort()).toEqual([
 			'check_sdo_auth',
+			'download_module_files',
+			'find_course_module',
+			'get_assignment_details',
+			'list_course_modules',
+			'list_courses',
 			'resolve_online_lecture',
 			'sdo_login',
 		])
@@ -106,6 +111,20 @@ describe('resolve_online_lecture MCP boundary', () => {
 		expect(
 			mcp.registrations.filter(({ args }) => args[0] === 'check_sdo_auth'),
 		).toHaveLength(1)
+	})
+
+	it('rejects course reads without saved authentication and closes browser resources', async () => {
+		const close = vi.fn().mockResolvedValue(undefined)
+		const closeBrowser = vi.fn().mockResolvedValue(undefined)
+		browser.getSdoPage.mockResolvedValue({
+			browser: { close: closeBrowser }, context: { close }, page: {}, authStatePresent: false,
+		})
+		const registration = mcp.registrations.find(({ args }) => args[0] === 'list_courses')!
+		const handler = registration.args[3] as () => Promise<unknown>
+		await expect(handler()).rejects.toThrow('SDO authentication required')
+		expect(sdo.hasAuthenticatedSdoSession).not.toHaveBeenCalled()
+		expect(close).toHaveBeenCalledOnce()
+		expect(closeBrowser).toHaveBeenCalledOnce()
 	})
 
 	it('reports an unusable saved session without exposing session data', async () => {

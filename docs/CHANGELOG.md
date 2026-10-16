@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased — breaking change для Online Lecture
+## Unreleased — восстановление инструментов курсов
+
+- Восстановлены `list_courses`, `get_assignment_details`, `download_module_files`, `list_course_modules` и `find_course_module`.
+- Добавлены проверки адресов SDO, состояния сессии, ссылок на файлы и ограничения скачивания.
+
+## 1.2.0 — breaking change для Online Lecture
 
 - В MCP-сервере остались только `sdo_login`, `check_sdo_auth` и `resolve_online_lecture`.
 - Удалены инструменты `list_courses`, `get_assignment_details`, `download_module_files`, `list_course_modules` и `find_course_module`. Клиенты этих инструментов должны обновить интеграцию.

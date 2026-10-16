@@ -4,6 +4,16 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 
 import { getSdoPage } from './browser.js'
+import {
+	downloadSdoModuleFiles,
+	findCourseModule,
+	getAssignmentDetails,
+	listCourseModules,
+	listCourses,
+	validateAssignmentUrl,
+	validateCourseUrl,
+	validateModuleUrl,
+} from './course-tools.js'
 import type { ResolveOnlineLectureResult } from './lecture-resolution.js'
 import { resolveOnlineLecture } from './resolve-online-lecture.js'
 import {
@@ -15,6 +25,53 @@ const server = new McpServer({
 	name: 'custom-sdo-mcp',
 	version: '0.1.0',
 })
+
+async function withAuthenticatedCoursePage<T>(action: (page: Awaited<ReturnType<typeof getSdoPage>>['page']) => Promise<T>): Promise<T> {
+	const sdoPage = await getSdoPage()
+	try {
+		if (!sdoPage.authStatePresent || !(await hasAuthenticatedSdoSession(sdoPage.page))) {
+			throw new Error('SDO authentication required; call sdo_login first')
+		}
+		return await action(sdoPage.page)
+	} finally {
+		try { await sdoPage.context.close() } finally { await sdoPage.browser.close() }
+	}
+}
+
+function textResult(value: unknown) {
+	return { content: [{ type: 'text' as const, text: typeof value === 'string' ? value : JSON.stringify(value, null, 2) }] }
+}
+
+server.tool('list_courses', 'Получить список курсов SDO TUSUR', {},
+	async () => textResult(await withAuthenticatedCoursePage(listCourses)))
+
+server.tool('get_assignment_details', 'Прочитать текст задания SDO TUSUR',
+	{ assignmentUrl: z.string().url() },
+	async ({ assignmentUrl }) => {
+		validateAssignmentUrl(assignmentUrl)
+		return textResult(await withAuthenticatedCoursePage((page) => getAssignmentDetails(page, assignmentUrl)))
+	})
+
+server.tool('download_module_files', 'Скачать файлы одного ресурса или задания SDO TUSUR',
+	{ moduleUrl: z.string().url() },
+	async ({ moduleUrl }) => {
+		validateModuleUrl(moduleUrl)
+		return textResult(await withAuthenticatedCoursePage((page) => downloadSdoModuleFiles(page, moduleUrl)))
+	})
+
+server.tool('list_course_modules', 'Получить список материалов и заданий курса SDO TUSUR',
+	{ courseUrl: z.string().url() },
+	async ({ courseUrl }) => {
+		validateCourseUrl(courseUrl)
+		return textResult(await withAuthenticatedCoursePage((page) => listCourseModules(page, courseUrl)))
+	})
+
+server.tool('find_course_module', 'Найти материал или задание курса SDO TUSUR',
+	{ courseUrl: z.string().url(), query: z.string().trim().min(1) },
+	async ({ courseUrl, query }) => {
+		validateCourseUrl(courseUrl)
+		return textResult(await withAuthenticatedCoursePage((page) => findCourseModule(page, courseUrl, query)))
+	})
 
 const resolveOnlineLectureInputSchema = z
 	.object({
