@@ -54,6 +54,19 @@ describe('course tool boundaries', () => {
 		expect(filterFileLinks(links)).toEqual([links[0]])
 	})
 
+	it('accepts direct SDO file links but rejects foreign and sensitive routes', () => {
+		const links = [
+			{ text: 'PDF', href: 'https://sdo.tusur.ru/files/lecture.pdf' },
+			{ text: 'DOCX', href: 'https://sdo.tusur.ru/content/task.docx' },
+			{ text: 'Other host', href: 'https://example.com/files/lecture.pdf' },
+			{ text: 'Secret query', href: 'https://sdo.tusur.ru/files/lecture.pdf?token=secret' },
+			{ text: 'Course route', href: 'https://sdo.tusur.ru/course/view.php/lecture.pdf' },
+			{ text: 'User route', href: 'https://sdo.tusur.ru/user/private.pdf' },
+			{ text: 'Extension lookalike', href: 'https://sdo.tusur.ru/files/lecture.pdf.exe' },
+		]
+		expect(filterFileLinks(links)).toEqual(links.slice(0, 2))
+	})
+
 	it('rejects an unsafe course URL before any browser request', async () => {
 		const page = { route: vi.fn(), goto: vi.fn() }
 		await expect(listCourseModules(page as never, 'https://evil.test/course/view.php?id=2'))
@@ -142,6 +155,39 @@ describe('course tool boundaries', () => {
 			const result = await downloadSdoModuleFiles(page as never, 'https://sdo.tusur.ru/mod/resource/view.php?id=4', outputRoot)
 			expect(result.files[0]?.status).toBe('downloaded')
 			expect(saveAs).toHaveBeenCalledWith(path.join(outputRoot, 'resource-4', 'file'))
+		} finally {
+			await fs.rm(outputRoot, { recursive: true, force: true })
+		}
+	})
+
+	it('uses a safe UTF-8 filename from Content-Disposition', async () => {
+		const requestGet = vi.fn().mockResolvedValue({
+			ok: () => true,
+			headers: () => ({
+				'content-type': 'application/pdf',
+				'content-disposition': "attachment; filename*=UTF-8''%D0%9B%D0%B5%D0%BA%D1%86%D0%B8%D1%8F.pdf",
+			}),
+			body: async () => Buffer.from('PDF'),
+		})
+		const page = {
+			route: vi.fn().mockResolvedValue(undefined),
+			goto: vi.fn().mockResolvedValue({ ok: () => true }),
+			url: vi.fn().mockReturnValue('https://sdo.tusur.ru/mod/assign/view.php?id=3'),
+			locator: vi.fn().mockImplementation((selector: string) => {
+				if (selector === 'a[href]') return { evaluateAll: vi.fn().mockImplementation(async (read) => read([
+					{ textContent: 'File', href: 'https://sdo.tusur.ru/files/download.pdf' },
+				])) }
+				if (selector === 'h1, h2, .page-header-headings') return { first: () => ({ innerText: vi.fn().mockResolvedValue('Task') }) }
+				if (selector === 'body') return { innerText: vi.fn().mockResolvedValue('Task text') }
+				return { count: vi.fn().mockResolvedValue(selector.includes('logout.php') ? 1 : 0) }
+			}),
+			context: () => ({ request: { get: requestGet } }),
+		}
+		const outputRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'sdo-filename-test-'))
+		try {
+			const result = await downloadSdoModuleFiles(page as never, 'https://sdo.tusur.ru/mod/assign/view.php?id=3', outputRoot)
+			expect(result.files[0]?.path).toBe(path.join(result.outputDir, '1-Лекция.pdf'))
+			expect(await fs.readFile(result.files[0]!.path, 'utf8')).toBe('PDF')
 		} finally {
 			await fs.rm(outputRoot, { recursive: true, force: true })
 		}
