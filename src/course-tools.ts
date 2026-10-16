@@ -10,6 +10,8 @@ const ORIGIN = 'https://sdo.tusur.ru'
 const MAX_FILES = 20
 const MAX_FILE_BYTES = 25 * 1024 * 1024
 const MAX_TOTAL_BYTES = 100 * 1024 * 1024
+const DIRECT_FILE_EXTENSION = /\.(?:pdf|docx?|xlsx?|pptx?|zip|rar|7z|txt|jpe?g|png)$/iu
+const NON_FILE_ROUTE = /^\/(?:admin|calendar|course|grade|login|mod|user|webservice)(?:\/|$)/iu
 
 type ModuleType = 'resource' | 'assign' | 'forum' | 'quiz'
 type Link = { title: string; url: string }
@@ -62,9 +64,11 @@ export function filterCourseModules(links: readonly Link[]): Array<Link & { type
 function canonicalFileUrl(value: string): string | undefined {
 	try {
 		const url = new URL(value)
+		const pluginFile = /^\/(?:webservice\/)?pluginfile\.php\/[^/]/u.test(url.pathname)
+		const directFile = DIRECT_FILE_EXTENSION.test(url.pathname) && !NON_FILE_ROUTE.test(url.pathname)
 		if (url.origin !== ORIGIN || url.username || url.password || url.hash ||
-			!/^\/(?:webservice\/)?pluginfile\.php\/[^/]/u.test(url.pathname) ||
-			(url.search !== '' && url.search !== '?forcedownload=1')) return undefined
+			(!pluginFile && !directFile) ||
+			(url.search !== '' && (!pluginFile || url.search !== '?forcedownload=1'))) return undefined
 		return url.href
 	} catch {
 		return undefined
@@ -156,6 +160,20 @@ function safeFileName(value: string): string {
 	return name && name !== '.' && name !== '..' ? name : 'file'
 }
 
+function responseFileName(contentDisposition: string | undefined, fallback: string): string {
+	if (contentDisposition) {
+		const encoded = contentDisposition.match(/(?:^|;)\s*filename\*\s*=\s*UTF-8''([^;]+)/iu)?.[1]
+		if (encoded) {
+			try { return safeFileName(decodeURIComponent(encoded.trim())) } catch { /* Use fallback. */ }
+		}
+		const quoted = contentDisposition.match(/(?:^|;)\s*filename\s*=\s*"([^"]*)"/iu)?.[1]
+		const plain = contentDisposition.match(/(?:^|;)\s*filename\s*=\s*([^;]+)/iu)?.[1]
+		const name = quoted ?? plain?.trim()
+		if (name) return safeFileName(name)
+	}
+	return fallback
+}
+
 export async function downloadSdoModuleFiles(page: Page, moduleUrl: string, outputRoot = 'downloads') {
 	const module = validateModuleUrl(moduleUrl)
 	let directDownload: Download | undefined
@@ -210,6 +228,7 @@ export async function downloadSdoModuleFiles(page: Page, moduleUrl: string, outp
 				files.push({ title: link.text || fileName, url: link.href, path: '', status: 'skipped' })
 				continue
 			}
+			fileName = responseFileName(response.headers()['content-disposition'], fileName)
 			const savePath = path.join(outputDir, `${index + 1}-${fileName}`)
 			await fs.writeFile(savePath, body)
 			totalBytes += body.length

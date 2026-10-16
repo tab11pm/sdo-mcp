@@ -4,6 +4,7 @@
 
 - Восстановлены `list_courses`, `get_assignment_details`, `download_module_files`, `list_course_modules` и `find_course_module`.
 - Добавлены проверки адресов SDO, состояния сессии, ссылок на файлы и ограничения скачивания.
+- Восстановлены ручные скрипты `test-login.ts`, `test-find-module.ts` и `test-download.ts`, поддержка прямых ссылок на файлы SDO и имён файлов из `Content-Disposition` с сохранением ограничений скачивания.
 
 ## 1.2.0 — breaking change для Online Lecture
 
