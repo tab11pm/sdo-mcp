@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import 'dotenv/config'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
@@ -14,6 +15,7 @@ import {
 	validateCourseUrl,
 	validateModuleUrl,
 } from './course-tools.js'
+import { BrowserLaunchError } from './browser-launch-error.js'
 import type { ResolveOnlineLectureResult } from './lecture-resolution.js'
 import { resolveOnlineLecture } from './resolve-online-lecture.js'
 import {
@@ -112,7 +114,8 @@ server.registerTool(
 					},
 				],
 			}
-		} catch {
+		} catch (error) {
+			if (error instanceof BrowserLaunchError) throw error
 			throw new Error('SDO page unavailable')
 		} finally {
 			if (sdoPage !== undefined) {
@@ -145,7 +148,8 @@ server.registerTool(
 			return {
 				content: [{ type: 'text', text: JSON.stringify({ authenticated }) }],
 			}
-		} catch {
+		} catch (error) {
+			if (error instanceof BrowserLaunchError) throw error
 			throw new Error('SDO page unavailable')
 		} finally {
 			if (sdoPage !== undefined) {
